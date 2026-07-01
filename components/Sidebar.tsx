@@ -17,9 +17,9 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import Logo from "./Logo";
-import { useChatStore, clearChat, loadConversation, deleteConversation } from "@/lib/chatStore";
+import { useChatStore, clearChat, loadConversation, deleteConversation, renameConversation } from "@/lib/chatStore";
 import TaskIndicator from "./TaskIndicator";
-import { Trash2, MessageSquare } from "lucide-react";
+import { Trash2, MessageSquare, Pencil } from "lucide-react";
 
 const navItems = [
   { id: "new", label: "新对话", icon: Plus },
@@ -59,6 +59,28 @@ export default function Sidebar({
   const chatRunning = chatState.isLoading;
   const conversations = chatState.conversations || [];
   const currentConvId = chatState.currentConversationId;
+
+  // 对话重命名状态
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
+
+  const startRename = (id: string, title: string) => {
+    setEditingId(id);
+    setEditingTitle(title);
+  };
+
+  const commitRename = () => {
+    if (editingId) {
+      renameConversation(editingId, editingTitle);
+    }
+    setEditingId(null);
+    setEditingTitle("");
+  };
+
+  const cancelRename = () => {
+    setEditingId(null);
+    setEditingTitle("");
+  };
 
   const handleNavClick = (id: string) => {
     if (id === "new") {
@@ -158,15 +180,20 @@ export default function Sidebar({
                   transition={{ type: "spring", stiffness: 380, damping: 30 }}
                 />
               )}
-              <Icon className="w-[18px] h-[18px] shrink-0" strokeWidth={1.75} />
+              <div className="relative shrink-0">
+                <Icon className="w-[18px] h-[18px]" strokeWidth={1.75} />
+                {/* 无当前对话但有任务运行时：新对话按钮显示 spinner */}
+                {item.id === "new" && chatRunning && !currentConvId && (
+                  <Loader2
+                    className="w-[18px] h-[18px] text-accent animate-spin absolute inset-0"
+                    strokeWidth={1.75}
+                  />
+                )}
+              </div>
               {!collapsed && (
                 <span className="text-sm font-medium tracking-tight flex-1 text-left">
                   {item.label}
                 </span>
-              )}
-              {/* 后台对话运行指示器 */}
-              {item.id === "new" && chatRunning && (
-                <Loader2 className="w-3 h-3 text-accent animate-spin shrink-0" />
               )}
             </motion.button>
           );
@@ -181,33 +208,87 @@ export default function Sidebar({
       )}
       {!collapsed && conversations.length > 0 && (
         <div className="flex-1 overflow-y-auto px-2 space-y-0.5 min-h-0">
-          {conversations.map((conv) => (
-            <div
-              key={conv.id}
-              className={`group relative h-8 px-2.5 rounded-md flex items-center gap-2 cursor-pointer transition-colors ${
-                currentConvId === conv.id
-                  ? "bg-notion-overlay text-notion-text"
-                  : "text-notion-text2 hover:bg-notion-overlay2"
-              }`}
-              onClick={() => {
-                loadConversation(conv.id);
-                window.location.href = "/";
-              }}
-            >
-              <MessageSquare className="w-[15px] h-[15px] shrink-0 text-notion-text4" strokeWidth={1.5} />
-              <span className="text-xs flex-1 truncate">{conv.title}</span>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  deleteConversation(conv.id);
+          {conversations.map((conv) => {
+            const isEditing = editingId === conv.id;
+            return (
+              <div
+                key={conv.id}
+                className={`group relative h-8 px-2.5 rounded-md flex items-center gap-2 cursor-pointer transition-colors ${
+                  currentConvId === conv.id
+                    ? "bg-notion-overlay text-notion-text"
+                    : "text-notion-text2 hover:bg-notion-overlay2"
+                } ${isEditing ? "bg-notion-overlay" : ""}`}
+                onClick={() => {
+                  if (isEditing) return;
+                  loadConversation(conv.id);
+                  window.location.href = "/";
                 }}
-                className="w-5 h-5 rounded flex items-center justify-center text-notion-text4 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all shrink-0"
-                title="删除对话"
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  startRename(conv.id, conv.title);
+                }}
               >
-                <Trash2 className="w-3 h-3" strokeWidth={1.5} />
-              </button>
-            </div>
-          ))}
+                <div className="relative shrink-0">
+                  <MessageSquare className="w-[15px] h-[15px] text-notion-text4" strokeWidth={1.5} />
+                  {/* 当前对话运行中：spinner 覆盖在图标上 */}
+                  {chatRunning && currentConvId === conv.id && (
+                    <Loader2
+                      className="w-[15px] h-[15px] text-accent animate-spin absolute inset-0"
+                      strokeWidth={1.5}
+                    />
+                  )}
+                </div>
+                {isEditing ? (
+                  <input
+                    autoFocus
+                    value={editingTitle}
+                    onChange={(e) => setEditingTitle(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    onDoubleClick={(e) => e.stopPropagation()}
+                    onBlur={commitRename}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        commitRename();
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        cancelRename();
+                      }
+                    }}
+                    className="flex-1 min-w-0 text-xs bg-white border border-accent-ring rounded px-1 py-0.5 outline-none focus:ring-1 focus:ring-accent"
+                  />
+                ) : (
+                  <span className="text-xs flex-1 truncate" title={conv.title}>
+                    {conv.title}
+                  </span>
+                )}
+                {!isEditing && (
+                  <div className="flex items-center shrink-0">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        startRename(conv.id, conv.title);
+                      }}
+                      className="w-5 h-5 rounded flex items-center justify-center text-notion-text4 hover:text-notion-text hover:bg-notion-overlay opacity-0 group-hover:opacity-100 transition-all"
+                      title="重命名"
+                    >
+                      <Pencil className="w-3 h-3" strokeWidth={1.5} />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteConversation(conv.id);
+                      }}
+                      className="w-5 h-5 rounded flex items-center justify-center text-notion-text4 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
+                      title="删除对话"
+                    >
+                      <Trash2 className="w-3 h-3" strokeWidth={1.5} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 

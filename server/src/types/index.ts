@@ -30,6 +30,8 @@ export interface ToolCall {
   id: string;
   name: string;
   args: Record<string, unknown>;
+  /** Gemini: 每个工具调用自带的 thought 签名（回传时必须附在对应 functionCall part 上） */
+  thoughtSignature?: string;
 }
 
 export interface ToolResult {

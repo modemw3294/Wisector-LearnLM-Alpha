@@ -77,10 +77,10 @@ export async function chatWithTools(
       content: result.content || "",
       tool_calls: result.toolCalls.map((tc) => ({
         id: tc.id,
-        type: "function",
+        type: "function" as const,
         function: { name: tc.name, arguments: JSON.stringify(tc.args) },
+        thoughtSignature: tc.thoughtSignature,
       })),
-      thought_signature: result.thoughtSignature,
       thought_text: result.thoughtText,
     });
 
@@ -172,12 +172,12 @@ interface ApiMessage {
     id: string;
     type: "function";
     function: { name: string; arguments: string };
+    /** Gemini: 该工具调用的 thought 签名（回传时附在对应 functionCall part 上） */
+    thoughtSignature?: string;
   }[];
   tool_call_id?: string;
   /** Gemini: 工具名（用于 functionResponse.name） */
   tool_name?: string;
-  /** Gemini: thought signature（回传 model 消息时必须带上） */
-  thought_signature?: string;
   /** Gemini: thought 文本（思考过程，回传时需要带上） */
   thought_text?: string;
 }
@@ -188,9 +188,7 @@ interface ApiMessage {
 interface CallResult {
   content: string;
   toolCalls?: ToolCall[];
-  /** Gemini: thought signature（需要存入 assistant 消息） */
-  thoughtSignature?: string;
-  /** Gemini: thought 文本 */
+  /** Gemini: thought 文本（思考过程） */
   thoughtText?: string;
 }
 
@@ -490,17 +488,12 @@ async function callGemini(
   if (!parts) return { content: "" };
 
   let content = "";
-  let thoughtSignature: string | undefined;
   let thoughtText: string | undefined;
   const toolCalls: ToolCall[] = [];
   for (const p of parts) {
-    // Gemini thinking: thought=true 的 text 是思考过程，thoughtSignature 是签名
+    // Gemini thinking: thought=true 的 text 是思考过程
     if (p.thought === true && p.text) {
       thoughtText = p.text;
-      continue;
-    }
-    if (p.thoughtSignature) {
-      thoughtSignature = p.thoughtSignature;
       continue;
     }
     if (p.text) content += p.text;
@@ -509,13 +502,14 @@ async function callGemini(
         id: `call_${Date.now()}_${toolCalls.length}`,
         name: p.functionCall.name,
         args: p.functionCall.args || {},
+        // 每个 functionCall part 自带的 thoughtSignature，回传时必须附上
+        thoughtSignature: p.thoughtSignature,
       });
     }
   }
   return {
     content,
     toolCalls: toolCalls.length ? toolCalls : undefined,
-    thoughtSignature,
     thoughtText,
   };
 }
@@ -539,18 +533,20 @@ function convertGeminiMessage(m: ApiMessage): any {
     const parts: any[] = [];
     // thought 文本（如果有）
     if (m.thought_text) parts.push({ text: m.thought_text, thought: true });
-    // thought signature（必须紧跟在 thought text 之后、functionCall 之前）
-    if (m.thought_signature) parts.push({ thoughtSignature: m.thought_signature });
     // 普通文本
     if (m.content) parts.push({ text: m.content });
-    // function calls
+    // function calls（每个都带上自身的 thoughtSignature）
     for (const tc of m.tool_calls) {
-      parts.push({
+      const part: any = {
         functionCall: {
           name: tc.function.name,
           args: JSON.parse(tc.function.arguments || "{}"),
         },
-      });
+      };
+      if (tc.thoughtSignature) {
+        part.thoughtSignature = tc.thoughtSignature;
+      }
+      parts.push(part);
     }
     return { role: "model", parts };
   }

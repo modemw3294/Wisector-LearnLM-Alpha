@@ -78,17 +78,22 @@ interface ToolCallPanelProps {
   tools: ToolCallState[];
 }
 
+/** 不在对话中显示可视化的工具（数据库底层操作，对用户无意义） */
+const HIDDEN_TOOLS = new Set(["db_read", "db_write", "db_delete"]);
+
 /**
  * 工具调用可视化面板。
  * 运行中：动画图标 + "正在XX…"
  * 完成：静态灰色图标 + "已XX" + 可展开结果
+ * 注：db_read/db_write/db_delete 为底层操作，不显示给用户
  */
 export default function ToolCallPanel({ tools }: ToolCallPanelProps) {
-  if (tools.length === 0) return null;
+  const visibleTools = tools.filter((t) => !HIDDEN_TOOLS.has(t.name));
+  if (visibleTools.length === 0) return null;
 
   return (
     <div className="mb-3 space-y-1.5">
-      {tools.map((tool) => {
+      {visibleTools.map((tool) => {
         const Icon = getToolIcon(tool.name);
         const label = getToolLabel(tool.name);
         const isRunning = tool.status === "running";

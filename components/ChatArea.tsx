@@ -22,15 +22,19 @@ import {
   StopCircle,
   Loader2,
   AlertCircle,
+  Copy,
+  RefreshCw,
+  ArrowDown,
 } from "lucide-react";
 import ModelSelector from "./ModelSelector";
 import TextbookSelector from "./TextbookSelector";
 import MarkdownRenderer from "./MarkdownRenderer";
+import TypewriterText from "./TypewriterText";
 import ToolCallPanel from "./ToolCallPanel";
 import { useModelConfigs } from "@/lib/useModelConfigs";
 import { api, ChatMessageFE } from "@/lib/api";
 import type { ModelConfig } from "@/lib/types";
-import { useChatStore, sendMessage, stopGeneration } from "@/lib/chatStore";
+import { useChatStore, sendMessage, stopGeneration, regenerateMessage } from "@/lib/chatStore";
 import DevLogPanel from "./DevLogPanel";
 
 /** 引用资源类型 */
@@ -90,6 +94,11 @@ export default function ChatArea({ onOpenMobileSidebar }: { onOpenMobileSidebar?
   const attachRef = useRef<HTMLDivElement>(null);
   const reasoningRef = useRef<HTMLDivElement>(null);
 
+  // 滚动到底部按钮
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
+  // 复制成功的消息 id（用于显示 ✓）
+  const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+
   const { models: configuredModels } = useModelConfigs();
 
   // 默认选中第一个已启用的模型（避免 ModelSelector 显示已选但 state 未设置导致无法发送）
@@ -111,12 +120,51 @@ export default function ChatArea({ onOpenMobileSidebar }: { onOpenMobileSidebar?
     ? currentConfiguredModel.reasoning === "intensity"
     : false;
 
-  // 自动滚动到底部
+  // 自动滚动到底部（仅在已接近底部时）
   useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    const el = chatContainerRef.current;
+    if (!el) return;
+    // 如果用户已滚动到接近底部（100px 内），则自动滚动
+    const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    if (isNearBottom) {
+      el.scrollTop = el.scrollHeight;
     }
   }, [messages]);
+
+  // 检测滚动位置，决定是否显示"滚动到底部"按钮
+  const handleChatScroll = useCallback(() => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+    const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    setShowScrollBottom(!isNearBottom && el.scrollHeight > el.clientHeight + 200);
+  }, []);
+
+  const scrollToBottom = useCallback(() => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, []);
+
+  // 复制消息内容
+  const handleCopyMessage = useCallback((msgId: string, content: string) => {
+    navigator.clipboard.writeText(content).then(() => {
+      setCopiedMsgId(msgId);
+      setTimeout(() => setCopiedMsgId(null), 2000);
+    });
+  }, []);
+
+  // 重新生成 AI 回答
+  const handleRegenerate = useCallback((messageIndex: number) => {
+    if (!selectedModelId || isLoading) return;
+    regenerateMessage({
+      messageIndex,
+      model: selectedModelId,
+      webAccess,
+      reasoning: reasoningEnabled
+        ? { enabled: true, intensity: INTENSITY_LEVELS[intensity].value }
+        : undefined,
+    });
+  }, [selectedModelId, isLoading, webAccess, reasoningEnabled, intensity]);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -364,25 +412,27 @@ export default function ChatArea({ onOpenMobileSidebar }: { onOpenMobileSidebar?
         ) : (
           /* 有消息时：对话流模式 */
           <>
-            {/* 对话消息区域（可滚动） */}
+            {/* 对话消息区域（可滚动，滚动条贴画面最右侧） */}
             <div
               ref={chatContainerRef}
-              className="w-full max-w-[704px] mx-auto space-y-4 mb-4 overflow-y-auto flex-1"
+              onScroll={handleChatScroll}
+              className="w-full flex-1 overflow-y-auto relative"
             >
+              <div className="w-full max-w-[704px] mx-auto px-4 space-y-4 mb-4 pt-2">
               <AnimatePresence initial={false}>
-                {messages.map((msg) => (
+                {messages.map((msg, msgIndex) => (
                   <motion.div
                     key={msg.id}
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.25 }}
-                    className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                    className={`group/msg flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                   >
                     <div
-                      className={`w-full ${
+                      className={`relative ${
                         msg.role === "user"
-                          ? "max-w-[85%] ml-auto rounded-2xl px-4 py-3 bg-accent text-white"
-                          : "bg-transparent text-notion-text"
+                          ? "max-w-[85%] ml-auto rounded-2xl px-4 py-3 bg-white border border-notion-border2 text-notion-text"
+                          : "w-full bg-transparent text-notion-text"
                       }`}
                     >
                       {msg.role === "user" ? (
@@ -390,26 +440,75 @@ export default function ChatArea({ onOpenMobileSidebar }: { onOpenMobileSidebar?
                       ) : (
                         <>
                           <ToolCallPanel tools={msg.toolCalls} />
-                          {msg.content && (
-                            <MarkdownRenderer>{msg.content}</MarkdownRenderer>
-                          )}
-                          {msg.loading && !msg.content && (
-                            <div className="flex items-center gap-2 text-notion-text4 text-sm">
-                              <motion.span
-                                animate={{ opacity: [0.4, 1, 0.4] }}
-                                transition={{ repeat: Infinity, duration: 1.5 }}
-                              >
-                                思考中…
-                              </motion.span>
-                            </div>
+                          {msg.content ? (
+                            <TypewriterText
+                              content={msg.content}
+                              loading={msg.loading}
+                            />
+                          ) : (
+                            msg.loading && (
+                              <div className="flex items-center gap-2 text-notion-text4 text-sm">
+                                <motion.span
+                                  animate={{ opacity: [0.4, 1, 0.4] }}
+                                  transition={{ repeat: Infinity, duration: 1.5 }}
+                                >
+                                  思考中…
+                                </motion.span>
+                              </div>
+                            )
                           )}
                         </>
+                      )}
+
+                      {/* 消息操作按钮（hover 显示） */}
+                      {!msg.loading && msg.content && (
+                        <div
+                          className={`absolute -bottom-7 ${
+                            msg.role === "user" ? "right-0" : "left-0"
+                          } flex items-center gap-0.5 opacity-0 group-hover/msg:opacity-100 transition-opacity`}
+                        >
+                          <button
+                            onClick={() => handleCopyMessage(msg.id, msg.content)}
+                            className="w-6 h-6 rounded flex items-center justify-center text-notion-text4 hover:text-notion-text hover:bg-notion-overlay2 transition-colors"
+                            title="复制"
+                          >
+                            {copiedMsgId === msg.id ? (
+                              <Check className="w-3 h-3 text-green-500" strokeWidth={2} />
+                            ) : (
+                              <Copy className="w-3 h-3" strokeWidth={1.5} />
+                            )}
+                          </button>
+                          {msg.role === "assistant" && !isLoading && (
+                            <button
+                              onClick={() => handleRegenerate(msgIndex)}
+                              className="w-6 h-6 rounded flex items-center justify-center text-notion-text4 hover:text-notion-text hover:bg-notion-overlay2 transition-colors"
+                              title="重新生成"
+                            >
+                              <RefreshCw className="w-3 h-3" strokeWidth={1.5} />
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   </motion.div>
                 ))}
               </AnimatePresence>
+              </div>
             </div>
+            <AnimatePresence>
+              {showScrollBottom && (
+                <motion.button
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  onClick={scrollToBottom}
+                  className="absolute bottom-32 left-1/2 -translate-x-1/2 w-9 h-9 rounded-full bg-white border border-notion-border2 shadow-md flex items-center justify-center text-notion-text2 hover:text-notion-text hover:shadow-lg transition-all z-10"
+                  title="滚动到底部"
+                >
+                  <ArrowDown className="w-4 h-4" strokeWidth={1.75} />
+                </motion.button>
+              )}
+            </AnimatePresence>
 
             {/* 对话模式下的输入框（固定底部） */}
             <div className="w-full max-w-[704px] mx-auto shrink-0">

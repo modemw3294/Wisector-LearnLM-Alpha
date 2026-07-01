@@ -90,16 +90,19 @@ function initConversations() {
   setState({ conversations });
 }
 
-// 在模块加载时初始化（仅浏览器环境）
-if (typeof window !== "undefined") {
-  initConversations();
-}
+// 标记是否已初始化（避免重复加载 localStorage）
+let initialized = false;
 
 /** React Hook：订阅全局对话状态 */
 export function useChatStore() {
   const [, forceUpdate] = useState(0);
 
   useEffect(() => {
+    // 客户端挂载后才从 localStorage 加载，避免 SSR 水合不匹配
+    if (!initialized && typeof window !== "undefined") {
+      initialized = true;
+      initConversations();
+    }
     const fn = () => forceUpdate((n) => n + 1);
     subscribers.add(fn);
     return () => {
@@ -303,6 +306,135 @@ export function deleteConversation(id: string) {
   // 如果删除的是当前对话，清空消息
   if (globalState.currentConversationId === id) {
     setState({ messages: [], currentConversationId: null });
+  }
+}
+
+/** 重命名对话 */
+export function renameConversation(id: string, title: string) {
+  const updated = globalState.conversations.map((c) =>
+    c.id === id ? { ...c, title: title.trim() || c.title } : c
+  );
+  setState({ conversations: updated });
+  saveConversationsToStorage(updated);
+}
+
+/** 重新生成指定 assistant 消息 */
+export async function regenerateMessage(params: {
+  messageIndex: number;
+  model: string;
+  webAccess?: boolean;
+  reasoning?: { enabled: boolean; intensity: string };
+}) {
+  const { messageIndex, model, webAccess, reasoning } = params;
+  if (globalState.isLoading || model === "unknown") return;
+
+  const msgs = [...globalState.messages];
+  // 找到要重新生成的 assistant 消息
+  const targetMsg = msgs[messageIndex];
+  if (!targetMsg || targetMsg.role !== "assistant") return;
+
+  // 找到它前面的那条 user 消息
+  let userMsg: ChatMessage | null = null;
+  for (let i = messageIndex - 1; i >= 0; i--) {
+    if (msgs[i].role === "user") {
+      userMsg = msgs[i];
+      break;
+    }
+  }
+  if (!userMsg) return;
+
+  // 截断到 user 消息为止（删除旧的 assistant 回答及之后的所有消息）
+  const truncated = msgs.slice(0, messageIndex);
+
+  // 新的 assistant 占位
+  const assistantMsgId = `assistant-${Date.now()}`;
+  const assistantMsg: ChatMessage = {
+    id: assistantMsgId,
+    role: "assistant",
+    content: "",
+    toolCalls: [],
+    loading: true,
+  };
+
+  setState({
+    messages: [...truncated, assistantMsg],
+    isLoading: true,
+  });
+
+  // 构建历史（截断后的消息）
+  const history: ChatMessageFE[] = truncated.map((m) => ({
+    role: m.role,
+    content: m.content,
+  }));
+
+  const controller = new AbortController();
+  globalAbort = controller;
+
+  try {
+    await api.chat({
+      message: userMsg.content,
+      model,
+      history,
+      webAccess,
+      reasoning,
+      signal: controller.signal,
+      onStep: (step: ChatStepFE) => {
+        const updated = [...globalState.messages];
+        const idx = updated.findIndex((m) => m.id === assistantMsgId);
+        if (idx === -1) return;
+
+        const msg = { ...updated[idx] };
+
+        if (step.type === "tool_call" && step.toolCall) {
+          msg.toolCalls = [...msg.toolCalls, {
+            id: step.toolCall.id,
+            name: step.toolCall.name,
+            status: "running" as const,
+          }];
+        }
+        if (step.type === "tool_result" && step.toolResult) {
+          msg.toolCalls = msg.toolCalls.map((tc) =>
+            tc.id === step.toolResult!.toolCallId
+              ? { ...tc, status: "done" as const, output: step.toolResult!.output }
+              : tc
+          );
+        }
+        if (step.type === "text" && step.text) {
+          msg.content += step.text;
+        }
+        if (step.type === "done") {
+          msg.loading = false;
+        }
+        if (step.type === "error") {
+          msg.content += `\n\n> ❌ 错误：${step.error || "未知错误"}`;
+          msg.loading = false;
+        }
+
+        updated[idx] = msg;
+        setState({ messages: updated });
+      },
+    });
+    saveCurrentConversation();
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      saveCurrentConversation();
+    } else {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      const updated = [...globalState.messages];
+      const idx = updated.findIndex((m) => m.id === assistantMsgId);
+      if (idx !== -1) {
+        updated[idx] = {
+          ...updated[idx],
+          content: updated[idx].content + `\n\n> ❌ 错误：${errorMsg}`,
+          loading: false,
+        };
+        setState({ messages: updated });
+      }
+      saveCurrentConversation();
+    }
+  } finally {
+    setState({ isLoading: false });
+    globalAbort = null;
   }
 }
 
