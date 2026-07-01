@@ -9,6 +9,11 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        accent: {
+          DEFAULT: "var(--accent)",
+          light: "var(--accent-light)",
+          ring: "var(--accent-ring)",
+        },
         notion: {
           bg: "#ffffff",
           sidebar: "#f9f8f7",
@@ -19,8 +24,8 @@ const config: Config = {
           text3: "#5f5e59",
           text4: "#91918e",
           text5: "#a19e99",
-          overlay: "rgba(42, 28, 0, 0.07)",
-          overlay2: "rgba(66, 35, 3, 0.03)",
+          overlay: "rgba(0, 0, 0, 0.07)",
+          overlay2: "rgba(0, 0, 0, 0.04)",
           shadow: "rgba(25, 25, 25, 0.03)",
         },
       },

@@ -1,0 +1,1674 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wisector LearnLM — 开源 AI 学习助手</title>
+  <meta name="description" content="Wisector LearnLM 是一个开源的 AI 学习助手，为学生和教师提供智能对话、课本管理、AI 视频创作和数据管理。" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400;1,9..40,500&family=Noto+Serif+SC:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f9f8f7;
+      --surface: #ffffff;
+      --surface-2: #fafaf9;
+      --border: #f0efed;
+      --border2: #e4e3e3;
+      --text: #2c2c2b;
+      --text2: #7d7a75;
+      --text3: #5f5e59;
+      --text4: #91918e;
+      --overlay: rgba(0, 0, 0, 0.07);
+      --overlay2: rgba(0, 0, 0, 0.04);
+      --blue: #3b82f6;
+      --blue-dark: #2563eb;
+      --blue-light: #eff6ff;
+      --blue-border: #bfdbfe;
+      --green: #059669;
+      --green-light: #ecfdf5;
+      --green-border: #a7f3d0;
+      --amber: #d97706;
+      --amber-light: #fffbeb;
+      --amber-border: #fde68a;
+      --violet: #7c3aed;
+      --violet-light: #f5f3ff;
+      --violet-border: #ddd6fe;
+      --rose: #e11d48;
+      --rose-light: #fff1f2;
+      --rose-border: #fecdd3;
+      --cyan: #0891b2;
+      --cyan-light: #ecfeff;
+      --cyan-border: #a5f3fc;
+      --code-bg: #1f1f1e;
+      --code-text: #e6e6e3;
+      --radius: 12px;
+      --radius-lg: 20px;
+      --radius-xl: 24px;
+      --shadow-sm: 0 1px 2px rgba(25, 25, 25, 0.03);
+      --shadow: 0 4px 12px rgba(25, 25, 25, 0.04), 0 1px 3px rgba(25, 25, 25, 0.03);
+      --shadow-lg: 0 12px 40px rgba(25, 25, 25, 0.08), 0 4px 12px rgba(25, 25, 25, 0.04);
+      --max-width: 1120px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      font-family: 'DM Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      letter-spacing: -0.15px;
+    }
+
+    svg { display: block; }
+
+    /* ── Top Nav ── */
+    .topnav {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      backdrop-filter: saturate(180%) blur(12px);
+      background: rgba(255, 255, 255, 0.8);
+      border-bottom: 1px solid var(--border);
+    }
+    .topnav-inner {
+      max-width: var(--max-width);
+      margin: 0 auto;
+      padding: 0 24px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+      color: var(--text);
+      font-weight: 600;
+      font-size: 15px;
+      letter-spacing: -0.2px;
+    }
+    .brand-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 7px;
+      background: linear-gradient(135deg, #3b82f6, #6366f1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .brand-icon-inner {
+      width: 14px;
+      height: 14px;
+      background: rgba(255,255,255,0.22);
+      border-radius: 3px;
+    }
+    .nav-links {
+      display: flex;
+      gap: 4px;
+      margin-left: auto;
+    }
+    .nav-link {
+      padding: 6px 12px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text2);
+      text-decoration: none;
+      border-radius: 6px;
+      transition: all 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .nav-link:hover { color: var(--text); background: var(--overlay2); }
+    .nav-link svg { width: 14px; height: 14px; }
+    .nav-link.github {
+      background: var(--text);
+      color: #fff;
+    }
+    .nav-link.github:hover { background: #1a1a19; transform: translateY(-1px); }
+
+    /* ── Hero ── */
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: 72px 24px 64px;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 70% 50% at 30% 0%, rgba(59, 130, 246, 0.06), transparent),
+        radial-gradient(ellipse 50% 40% at 70% 20%, rgba(99, 102, 241, 0.04), transparent);
+      pointer-events: none;
+    }
+    .hero-inner {
+      position: relative;
+      max-width: var(--max-width);
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 56px;
+      align-items: center;
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 14px;
+      border-radius: 9999px;
+      background: var(--blue-light);
+      border: 1px solid var(--blue-border);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--blue-dark);
+      letter-spacing: -0.1px;
+      margin-bottom: 20px;
+    }
+    .hero-badge-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.15);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .hero h1 {
+      font-family: 'Noto Serif SC', 'DM Sans', serif;
+      font-size: clamp(36px, 5.2vw, 56px);
+      font-weight: 700;
+      line-height: 1.1;
+      letter-spacing: -0.6px;
+      color: var(--text);
+      margin-bottom: 20px;
+    }
+    .hero h1 .accent {
+      background: linear-gradient(135deg, #3b82f6, #6366f1);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero p.lead {
+      font-size: 17px;
+      color: var(--text2);
+      max-width: 520px;
+      line-height: 1.7;
+      margin-bottom: 28px;
+    }
+    .hero-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 32px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 22px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+      cursor: pointer;
+      letter-spacing: -0.1px;
+      border: none;
+      font-family: inherit;
+    }
+    .btn svg { width: 16px; height: 16px; }
+    .btn-primary {
+      background: var(--text);
+      color: #fff;
+    }
+    .btn-primary:hover {
+      background: #1a1a19;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+    }
+    .btn-secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border2);
+    }
+    .btn-secondary:hover { background: var(--overlay2); border-color: var(--text4); }
+    .hero-stats {
+      display: flex;
+      gap: 28px;
+      flex-wrap: wrap;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+    .stat-num {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.3px;
+    }
+    .stat-label {
+      font-size: 12px;
+      color: var(--text4);
+      font-weight: 500;
+    }
+
+    /* ── Browser Mockup ── */
+    .mockup-wrap {
+      position: relative;
+      perspective: 1500px;
+    }
+    .mockup {
+      background: var(--surface);
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+      transform: rotateY(-5deg) rotateX(2deg);
+      transition: transform 0.4s;
+    }
+    .mockup:hover { transform: rotateY(0) rotateX(0); }
+    .mockup-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 14px;
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border);
+    }
+    .mockup-bar-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .mockup-bar-dot.red { background: #ef4444; }
+    .mockup-bar-dot.yellow { background: #f59e0b; }
+    .mockup-bar-dot.green { background: #22c55e; }
+    .mockup-bar-url {
+      flex: 1;
+      height: 24px;
+      border-radius: 5px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      font-size: 11px;
+      color: var(--text4);
+      font-family: 'JetBrains Mono', monospace;
+      margin-left: 8px;
+    }
+    .mockup-body {
+      display: flex;
+      height: 380px;
+    }
+    .mockup-side {
+      width: 180px;
+      flex-shrink: 0;
+      background: var(--surface-2);
+      border-right: 1px solid var(--border);
+      padding: 10px 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+    .mockup-side-head {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 8px;
+      margin-bottom: 6px;
+    }
+    .mockup-side-logo {
+      width: 18px;
+      height: 18px;
+      border-radius: 5px;
+      background: linear-gradient(135deg, #3b82f6, #6366f1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .mockup-side-logo div { width: 9px; height: 9px; background: rgba(255,255,255,0.22); border-radius: 2px; }
+    .mockup-side-title { font-size: 11px; font-weight: 600; color: var(--text); }
+    .mockup-nav-item {
+      height: 26px;
+      padding: 0 8px;
+      border-radius: 5px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text2);
+    }
+    .mockup-nav-item.active { color: var(--text); background: var(--overlay); }
+    .mockup-nav-item svg { width: 13px; height: 13px; flex-shrink: 0; }
+    .mockup-side-bottom {
+      margin-top: auto;
+      border-top: 1px solid var(--border);
+      padding-top: 6px;
+    }
+    .mockup-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--surface);
+      min-width: 0;
+    }
+    .mockup-topbar {
+      height: 38px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+    }
+    .mockup-textbook {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 9px;
+      border-radius: 5px;
+      border: 1px solid var(--border2);
+      font-size: 11px;
+      color: var(--text);
+    }
+    .mockup-textbook svg { width: 12px; height: 12px; color: var(--text4); }
+    .mockup-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      gap: 14px;
+    }
+    .mockup-input {
+      width: 100%;
+      max-width: 380px;
+      border: 1px solid var(--border2);
+      border-radius: 16px;
+      padding: 10px 12px;
+      background: var(--surface);
+      box-shadow: 0 4px 8px rgba(25,25,25,0.03);
+    }
+    .mockup-input-placeholder {
+      font-size: 11px;
+      color: var(--text4);
+      margin-bottom: 10px;
+    }
+    .mockup-input-tools {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .mockup-tool {
+      width: 20px;
+      height: 20px;
+      border-radius: 5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text2);
+    }
+    .mockup-tool svg { width: 13px; height: 13px; }
+    .mockup-model {
+      margin-left: auto;
+      font-size: 10px;
+      padding: 3px 7px;
+      border-radius: 5px;
+      background: var(--overlay2);
+      border: 1px solid var(--border);
+      color: var(--text2);
+      font-weight: 500;
+    }
+    .mockup-send {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--blue);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .mockup-send svg { width: 10px; height: 10px; color: #fff; }
+    .mockup-actions {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 5px;
+      width: 100%;
+      max-width: 380px;
+    }
+    .mockup-action {
+      padding: 8px;
+      border-radius: 10px;
+      background: var(--overlay2);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .mockup-action svg { width: 13px; height: 13px; color: var(--text3); }
+    .mockup-action span { font-size: 9px; color: var(--text2); }
+
+    /* ── Section base ── */
+    .section {
+      max-width: var(--max-width);
+      margin: 0 auto;
+      padding: 80px 24px;
+    }
+    .section-header {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+    .section-label {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--blue-dark);
+      margin-bottom: 12px;
+      padding: 4px 12px;
+      background: var(--blue-light);
+      border-radius: 9999px;
+      border: 1px solid var(--blue-border);
+    }
+    .section h2 {
+      font-family: 'Noto Serif SC', 'DM Sans', serif;
+      font-size: clamp(28px, 4vw, 40px);
+      font-weight: 700;
+      line-height: 1.2;
+      letter-spacing: -0.3px;
+      margin-bottom: 14px;
+    }
+    .section-header p {
+      font-size: 16px;
+      color: var(--text2);
+      max-width: 600px;
+      margin: 0 auto;
+      line-height: 1.7;
+    }
+
+    /* ── Pages showcase ── */
+    .pages {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+    .page-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      transition: all 0.25s;
+    }
+    .page-card:hover {
+      box-shadow: var(--shadow-lg);
+      transform: translateY(-3px);
+      border-color: var(--border2);
+    }
+    .page-preview {
+      height: 180px;
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .page-preview-content {
+      width: 86%;
+      height: 78%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .pp-bar {
+      height: 8px;
+      border-radius: 3px;
+      background: var(--border2);
+    }
+    .pp-bar.short { width: 50%; }
+    .pp-bar.med { width: 70%; }
+    .pp-bar.accent { background: var(--blue); opacity: 0.6; }
+    .pp-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4px;
+      margin-top: 4px;
+    }
+    .pp-box {
+      height: 18px;
+      background: var(--overlay2);
+      border-radius: 3px;
+    }
+    .page-info {
+      padding: 18px 20px;
+    }
+    .page-tag {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: var(--blue-light);
+      color: var(--blue-dark);
+      margin-bottom: 8px;
+    }
+    .page-info h3 {
+      font-size: 17px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      letter-spacing: -0.2px;
+    }
+    .page-info p {
+      font-size: 13px;
+      color: var(--text2);
+      line-height: 1.6;
+      margin-bottom: 12px;
+    }
+    .page-features {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+    .page-features span {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      background: var(--overlay2);
+      color: var(--text3);
+      font-weight: 500;
+    }
+
+    /* ── Feature detailed grid ── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 20px;
+    }
+    .feature-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      transition: all 0.25s;
+      position: relative;
+      overflow: hidden;
+    }
+    .feature-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 0.3s;
+    }
+    .feature-card:hover::before { transform: scaleX(1); }
+    .feature-card:hover {
+      box-shadow: var(--shadow);
+      transform: translateY(-2px);
+      border-color: var(--border2);
+    }
+    .feature-card.accent-blue::before { background: var(--blue); }
+    .feature-card.accent-green::before { background: var(--green); }
+    .feature-card.accent-amber::before { background: var(--amber); }
+    .feature-card.accent-violet::before { background: var(--violet); }
+    .feature-card.accent-rose::before { background: var(--rose); }
+    .feature-card.accent-cyan::before { background: var(--cyan); }
+    .feature-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+    .feature-icon svg { width: 22px; height: 22px; }
+    .feature-icon.blue { background: var(--blue-light); color: var(--blue); }
+    .feature-icon.green { background: var(--green-light); color: var(--green); }
+    .feature-icon.amber { background: var(--amber-light); color: var(--amber); }
+    .feature-icon.violet { background: var(--violet-light); color: var(--violet); }
+    .feature-icon.rose { background: var(--rose-light); color: var(--rose); }
+    .feature-icon.cyan { background: var(--cyan-light); color: var(--cyan); }
+    .feature-card h3 {
+      font-size: 17px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      letter-spacing: -0.2px;
+    }
+    .feature-card p {
+      font-size: 14px;
+      color: var(--text2);
+      line-height: 1.65;
+      margin-bottom: 14px;
+    }
+    .feature-list {
+      list-style: none;
+      padding: 0;
+      margin-top: 14px;
+    }
+    .feature-list li {
+      font-size: 13px;
+      color: var(--text3);
+      padding: 4px 0;
+      padding-left: 22px;
+      position: relative;
+    }
+    .feature-list li::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 11px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--blue-light);
+      border: 1.5px solid var(--blue);
+    }
+    .feature-list li::after {
+      content: '';
+      position: absolute;
+      left: 4px;
+      top: 14px;
+      width: 4px;
+      height: 2px;
+      background: var(--blue);
+      transform: rotate(45deg);
+      border-left: none;
+    }
+
+    /* ── Presets ── */
+    .preset-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      margin-top: 48px;
+    }
+    .preset-col {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+    }
+    .preset-col-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 14px;
+    }
+    .preset-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .preset-icon svg { width: 18px; height: 18px; }
+    .preset-icon.chat { background: var(--blue-light); color: var(--blue); }
+    .preset-icon.image { background: var(--violet-light); color: var(--violet); }
+    .preset-icon.tts { background: var(--amber-light); color: var(--amber); }
+    .preset-col-head h4 { font-size: 15px; font-weight: 700; letter-spacing: -0.1px; }
+    .preset-col-head p { font-size: 12px; color: var(--text4); }
+    .preset-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .preset-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      transition: all 0.15s;
+    }
+    .preset-item:hover { border-color: var(--border2); background: var(--surface); }
+    .preset-name { font-size: 13px; font-weight: 600; color: var(--text); }
+    .preset-id {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--text4);
+      background: var(--overlay2);
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-left: auto;
+    }
+    .preset-provider {
+      font-size: 11px;
+      color: var(--text4);
+    }
+
+    /* ── Workflow ── */
+    .workflow {
+      display: flex;
+      align-items: stretch;
+      gap: 0;
+      overflow-x: auto;
+      padding: 8px 0;
+      -webkit-overflow-scrolling: touch;
+    }
+    .workflow-step {
+      flex: 1;
+      min-width: 200px;
+      text-align: center;
+      padding: 0 16px;
+      position: relative;
+    }
+    .workflow-num {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 2px solid var(--border2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 16px;
+      color: var(--blue);
+      position: relative;
+      z-index: 2;
+      transition: all 0.25s;
+    }
+    .workflow-step:hover .workflow-num {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 6px var(--blue-light);
+      transform: translateY(-2px);
+    }
+    .workflow-num svg { width: 24px; height: 24px; }
+    .workflow-step::after {
+      content: '';
+      position: absolute;
+      top: 28px;
+      right: -50%;
+      width: 100%;
+      height: 2px;
+      background: var(--border2);
+      z-index: 1;
+    }
+    .workflow-step:last-child::after { display: none; }
+    .workflow-step h4 {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      letter-spacing: -0.1px;
+    }
+    .workflow-step p {
+      font-size: 12px;
+      color: var(--text2);
+      line-height: 1.5;
+    }
+
+    /* ── Tech grid ── */
+    .tech-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 14px;
+    }
+    .tech-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 16px 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      transition: all 0.2s;
+    }
+    .tech-item:hover {
+      border-color: var(--border2);
+      box-shadow: var(--shadow-sm);
+      transform: translateY(-1px);
+    }
+    .tech-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 9px;
+      background: var(--overlay2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .tech-icon svg { width: 20px; height: 20px; color: var(--text2); }
+    .tech-name { font-size: 14px; font-weight: 600; color: var(--text); }
+    .tech-desc { font-size: 12px; color: var(--text4); margin-top: 2px; }
+
+    /* ── Code/structure ── */
+    .code-block {
+      background: var(--code-bg);
+      border-radius: var(--radius-lg);
+      padding: 24px 28px;
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      font-size: 13px;
+      line-height: 2;
+      color: var(--code-text);
+      overflow-x: auto;
+      border: 1px solid #2d2d2c;
+    }
+    .code-block .dir { color: #79c0ff; font-weight: 500; }
+    .code-block .file { color: #e6e6e3; }
+    .code-block .comment { color: #6e7681; font-style: italic; }
+    .code-block .keyword { color: #ff7b72; }
+
+    /* ── Getting started ── */
+    .get-started-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+    }
+    .step-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      position: relative;
+    }
+    .step-num {
+      position: absolute;
+      top: 24px;
+      right: 24px;
+      font-size: 48px;
+      font-weight: 800;
+      color: var(--overlay);
+      line-height: 1;
+      letter-spacing: -2px;
+    }
+    .step-card h4 {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      letter-spacing: -0.1px;
+    }
+    .step-card p {
+      font-size: 13px;
+      color: var(--text2);
+      margin-bottom: 12px;
+    }
+    .step-code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      padding: 8px 12px;
+      border-radius: 6px;
+      color: var(--text);
+      display: block;
+      overflow-x: auto;
+    }
+    .step-code .prompt { color: var(--blue); user-select: none; }
+
+    /* ── CTA ── */
+    .cta {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 80px 24px;
+      text-align: center;
+    }
+    .cta-inner { max-width: 700px; margin: 0 auto; }
+    .cta h2 {
+      font-family: 'Noto Serif SC', serif;
+      font-size: clamp(28px, 4vw, 40px);
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      margin-bottom: 14px;
+    }
+    .cta p {
+      font-size: 16px;
+      color: var(--text2);
+      margin-bottom: 28px;
+      line-height: 1.7;
+    }
+    .cta-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    /* ── Footer ── */
+    footer {
+      padding: 40px 24px;
+      text-align: center;
+      font-size: 13px;
+      color: var(--text4);
+    }
+    .footer-brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .footer-brand-icon {
+      width: 22px;
+      height: 22px;
+      border-radius: 5px;
+      background: linear-gradient(135deg, #3b82f6, #6366f1);
+    }
+    .footer-brand-name { font-size: 14px; font-weight: 600; color: var(--text2); }
+    .footer-links {
+      display: flex;
+      gap: 18px;
+      justify-content: center;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+    .footer-links a {
+      color: var(--text2);
+      text-decoration: none;
+      transition: color 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 13px;
+    }
+    .footer-links a:hover { color: var(--text); }
+    .footer-links svg { width: 14px; height: 14px; }
+
+    /* ── Responsive ── */
+    @media (max-width: 900px) {
+      .hero-inner { grid-template-columns: 1fr; gap: 40px; }
+      .pages { grid-template-columns: 1fr; }
+      .preset-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 768px) {
+      .topnav-inner { padding: 0 16px; gap: 12px; }
+      .nav-link:not(.github) { display: none; }
+      .hero { padding: 48px 16px 40px; }
+      .section { padding: 56px 16px; }
+      .features-grid { grid-template-columns: 1fr; }
+      .workflow { flex-direction: column; gap: 24px; }
+      .workflow-step { padding: 0; }
+      .workflow-step::after { display: none; }
+      .cta { padding: 56px 16px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ═══════════════ TOP NAV ═══════════════ -->
+  <nav class="topnav">
+    <div class="topnav-inner">
+      <a href="#top" class="brand">
+        <span class="brand-icon"><span class="brand-icon-inner"></span></span>
+        Wisector LearnLM
+      </a>
+      <div class="nav-links">
+        <a href="#pages" class="nav-link">页面</a>
+        <a href="#features" class="nav-link">功能</a>
+        <a href="#tech" class="nav-link">技术</a>
+        <a href="#start" class="nav-link">开始使用</a>
+        <a href="https://github.com/modemw3294/Wisector-LearnLM-Alpha" target="_blank" rel="noopener" class="nav-link github">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.26.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.84 1.236 1.84 1.236 1.07 1.835 2.807 1.305 3.492.998.108-.776.418-1.305.762-1.605-2.665-.3-5.467-1.332-5.467-5.93 0-1.31.467-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.4 3-.405 1.02.005 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <div id="top"></div>
+
+  <!-- ═══════════════ HERO ═══════════════ -->
+  <section class="hero">
+    <div class="hero-inner">
+      <div>
+        <div class="hero-badge">
+          <span class="hero-badge-dot"></span>
+          开源项目 · MIT 协议 · v0.1.0
+        </div>
+        <h1>
+          为学习而生的<br/><span class="accent">AI 智能助手</span>
+        </h1>
+        <p class="lead">
+          Wisector LearnLM 是一款开源的 AI 学习平台，整合对话式学习、课本管理、AI 视频创作与数据管理，面向学生与教师的完整工具链。
+        </p>
+        <div class="hero-actions">
+          <a href="https://github.com/modemw3294/Wisector-LearnLM-Alpha" target="_blank" rel="noopener" class="btn btn-primary">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.26.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.84 1.236 1.84 1.236 1.07 1.835 2.807 1.305 3.492.998.108-.776.418-1.305.762-1.605-2.665-.3-5.467-1.332-5.467-5.93 0-1.31.467-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.4 3-.405 1.02.005 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12z"/></svg>
+            查看源码
+          </a>
+          <a href="#start" class="btn btn-secondary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            快速开始
+          </a>
+        </div>
+        <div class="hero-stats">
+          <div>
+            <div class="stat-num">4</div>
+            <div class="stat-label">核心模块</div>
+          </div>
+          <div>
+            <div class="stat-num">10+</div>
+            <div class="stat-label">预设模型</div>
+          </div>
+          <div>
+            <div class="stat-num">100%</div>
+            <div class="stat-label">TypeScript</div>
+          </div>
+          <div>
+            <div class="stat-num">MIT</div>
+            <div class="stat-label">开源协议</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- UI Mockup -->
+      <div class="mockup-wrap">
+        <div class="mockup">
+          <div class="mockup-bar">
+            <span class="mockup-bar-dot red"></span>
+            <span class="mockup-bar-dot yellow"></span>
+            <span class="mockup-bar-dot green"></span>
+            <div class="mockup-bar-url">localhost:3000</div>
+          </div>
+          <div class="mockup-body">
+            <div class="mockup-side">
+              <div class="mockup-side-head">
+                <div class="mockup-side-logo"><div></div></div>
+                <span class="mockup-side-title">LearnLM</span>
+              </div>
+              <div class="mockup-nav-item active">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                新对话
+              </div>
+              <div class="mockup-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                视频
+              </div>
+              <div class="mockup-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+                讲解
+              </div>
+              <div class="mockup-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+                测验
+              </div>
+              <div class="mockup-nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                学习轨迹
+              </div>
+              <div class="mockup-side-bottom">
+                <div class="mockup-nav-item">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+                  数据管理
+                </div>
+                <div class="mockup-nav-item">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9c.36.61 1.02 1 1.74 1H21a2 2 0 010 4h-.09c-.7 0-1.36.39-1.74 1z"/></svg>
+                  设置
+                </div>
+              </div>
+            </div>
+            <div class="mockup-main">
+              <div class="mockup-topbar">
+                <div class="mockup-textbook">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+                  高中数学必修一
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" style="width:10px;height:10px;"><polyline points="6 9 12 15 18 9"/></svg>
+                </div>
+              </div>
+              <div class="mockup-content">
+                <div class="mockup-input">
+                  <div class="mockup-input-placeholder">询问任何问题...</div>
+                  <div class="mockup-input-tools">
+                    <div class="mockup-tool">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    </div>
+                    <div class="mockup-tool">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6m11-7h-6m-6 0H1"/></svg>
+                    </div>
+                    <div class="mockup-model">GPT-5.5</div>
+                    <div class="mockup-send">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                    </div>
+                  </div>
+                </div>
+                <div class="mockup-actions">
+                  <div class="mockup-action">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z"/></svg>
+                    <span>新功能</span>
+                  </div>
+                  <div class="mockup-action">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                    <span>撰写笔记</span>
+                  </div>
+                  <div class="mockup-action">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>
+                    <span>分析题目</span>
+                  </div>
+                  <div class="mockup-action">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                    <span>任务跟踪</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════ PAGES ═══════════════ -->
+  <section class="section" id="pages">
+    <div class="section-header">
+      <span class="section-label">四大模块</span>
+      <h2>完整的学习生态</h2>
+      <p>从 AI 对话到视频创作，从课本管理到数据识别 —— 一个应用覆盖所有学习场景。</p>
+    </div>
+
+    <div class="pages">
+      <!-- 对话页 -->
+      <div class="page-card">
+        <div class="page-preview">
+          <div class="page-preview-content">
+            <div class="pp-bar accent"></div>
+            <div class="pp-bar med"></div>
+            <div class="pp-bar short"></div>
+            <div class="pp-grid">
+              <div class="pp-box"></div>
+              <div class="pp-box"></div>
+              <div class="pp-box"></div>
+            </div>
+          </div>
+        </div>
+        <div class="page-info">
+          <span class="page-tag">/ 对话</span>
+          <h3>AI 对话</h3>
+          <p>核心交互入口，支持多模型切换、推理强度调节、网络访问、附件上传等。</p>
+          <div class="page-features">
+            <span>多模型</span><span>推理控制</span><span>网络访问</span><span>附件</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 视频页 -->
+      <div class="page-card">
+        <div class="page-preview">
+          <div class="page-preview-content">
+            <div class="pp-bar short"></div>
+            <div class="pp-bar"></div>
+            <div class="pp-bar accent"></div>
+            <div class="pp-bar med"></div>
+            <div class="pp-grid" style="grid-template-columns: 1fr 1fr;">
+              <div class="pp-box" style="height:24px;"></div>
+              <div class="pp-box" style="height:24px;"></div>
+            </div>
+          </div>
+        </div>
+        <div class="page-info">
+          <span class="page-tag">/ video</span>
+          <h3>视频创作</h3>
+          <p>向导式创作教学视频，支持课本/题目选择、TTS 配音、图片生成与风格定制。</p>
+          <div class="page-features">
+            <span>向导流程</span><span>TTS</span><span>图片生成</span><span>风格选择</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 数据管理 -->
+      <div class="page-card">
+        <div class="page-preview">
+          <div class="page-preview-content">
+            <div class="pp-bar med"></div>
+            <div class="pp-grid">
+              <div class="pp-box"></div>
+              <div class="pp-box"></div>
+              <div class="pp-box"></div>
+            </div>
+            <div class="pp-bar accent" style="margin-top:auto;"></div>
+          </div>
+        </div>
+        <div class="page-info">
+          <span class="page-tag">/ data</span>
+          <h3>数据管理</h3>
+          <p>上传试卷图片，AI 多模态识别题目、难度、题型，按合集组织管理。</p>
+          <div class="page-features">
+            <span>OCR 识别</span><span>合集</span><span>LaTeX</span><span>编辑</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════ DETAILED FEATURES ═══════════════ -->
+  <section class="section" id="features" style="padding-top: 0;">
+    <div class="section-header">
+      <span class="section-label">功能详解</span>
+      <h2>每一个细节都经过打磨</h2>
+      <p>从底层架构到交互细节，Wisector LearnLM 追求生产级的工程质量。</p>
+    </div>
+
+    <div class="features-grid">
+      <div class="feature-card accent-blue">
+        <div class="feature-icon blue">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        </div>
+        <h3>智能对话系统</h3>
+        <p>支持 OpenAI、Anthropic、Gemini 多家模型，可配置自定义端点、API Key、上下文窗口与定价。</p>
+        <ul class="feature-list">
+          <li>推理强度 5 档可调（Low / Medium / High / xHigh / Max）</li>
+          <li>网络访问开关，支持实时联网搜索</li>
+          <li>询问 / 编辑双模式切换</li>
+          <li>附件上传：图片、文件、引用笔记</li>
+        </ul>
+      </div>
+
+      <div class="feature-card accent-green">
+        <div class="feature-icon green">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+        </div>
+        <h3>AI 视频创作</h3>
+        <p>5 步向导式流程，从选题到合成全自动，适合快速制作教学微课。</p>
+        <ul class="feature-list">
+          <li>支持单选课本或「课本 + 题目」组合模式</li>
+          <li>多模态主模型驱动幻灯片生成与圈点动画</li>
+          <li>TTS 配音：speech-2.8-hd、Gemini TTS</li>
+          <li>图片生成：4 种风格（插画 / 线稿 / 写实 / 卡通）</li>
+        </ul>
+      </div>
+
+      <div class="feature-card accent-amber">
+        <div class="feature-icon amber">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </div>
+        <h3>课本管理</h3>
+        <p>独立窗口选择课本，支持编辑、删除、按学科筛选，题目严格按课本匹配。</p>
+        <ul class="feature-list">
+          <li>中央弹出式独立选择窗口（Portal 渲染）</li>
+          <li>多版本教材：人教版、教科版、外研版、浙教版</li>
+          <li>支持搜索、筛选、新建</li>
+          <li>题目按课本名称严格筛选</li>
+        </ul>
+      </div>
+
+      <div class="feature-card accent-violet">
+        <div class="feature-icon violet">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+        </div>
+        <h3>数据管理</h3>
+        <p>上传试卷后，AI 自动识别题目内容、题型（选择 / 填空 / 解答 / 判断）、难度与参考答案。</p>
+        <ul class="feature-list">
+          <li>多模态识别模型：Claude Opus 4.8、Gemini 3.1 Pro、GPT-5.5</li>
+          <li>题目按合集（Collection）组织</li>
+          <li>LaTeX 公式渲染（行内 + 块级）</li>
+          <li>可视化编辑题目与课本</li>
+        </ul>
+      </div>
+
+      <div class="feature-card accent-rose">
+        <div class="feature-icon rose">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2a3 3 0 00-3 3v7a3 3 0 006 0V5a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+        </div>
+        <h3>预设模型库</h3>
+        <p>内置 10+ 主流模型预设，一键填入 endpoint、上下文窗口、输入模态等配置。</p>
+        <ul class="feature-list">
+          <li>对话模型：Claude Fable 5、Opus 4.8、GPT-5.5、Gemini 3.1 Pro</li>
+          <li>生图模型：GPT Image 2、Nano Banana 2、Seedream 4</li>
+          <li>TTS 模型：speech-2.8-hd、Gemini TTS Preview</li>
+          <li>支持自定义模型、定价配置（CNY / USD）</li>
+        </ul>
+      </div>
+
+      <div class="feature-card accent-cyan">
+        <div class="feature-icon cyan">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12" y2="18"/></svg>
+        </div>
+        <h3>移动端适配</h3>
+        <p>采用 mobile-first 设计，全屏弹窗、抽屉式侧边栏、弹性网格布局。</p>
+        <ul class="feature-list">
+          <li>移动端设置弹窗全屏（dvh 动态视口）</li>
+          <li>横向滚动 Tab 导航</li>
+          <li>Framer Motion 流畅过渡动画</li>
+          <li>完整触摸友好的交互设计</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════ PRESETS ═══════════════ -->
+  <section class="section" style="padding-top: 0;">
+    <div class="section-header">
+      <span class="section-label">预设模型</span>
+      <h2>开箱即用的模型配置</h2>
+      <p>内置三大类预设模型，无需手动填写 endpoint、上下文窗口、模态等繁琐配置。</p>
+    </div>
+
+    <div class="preset-grid">
+      <div class="preset-col">
+        <div class="preset-col-head">
+          <div class="preset-icon chat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+          </div>
+          <div>
+            <h4>对话模型</h4>
+            <p>支持文本 / 图像 / PDF 多模态</p>
+          </div>
+        </div>
+        <ul class="preset-list">
+          <li class="preset-item">
+            <div>
+              <div class="preset-name">Claude Fable 5</div>
+              <div class="preset-provider">Anthropic · 200K 上下文</div>
+            </div>
+            <span class="preset-id">claude-fable-5</span>
+          </li>
+          <li class="preset-item">
+            <div>
+              <div class="preset-name">Claude Opus 4.8</div>
+              <div class="preset-provider">Anthropic · 200K 上下文</div>
+            </div>
+            <span class="preset-id">claude-opus-4.8</span>
+          </li>
+          <li class="preset-item">
+            <div>
+              <div class="preset-name">GPT-5.5</div>
+              <div class="preset-provider">OpenAI · 128K 上下文</div>
+            </div>
+            <span class="preset-id">gpt-5.5</span>
+          </li>
+          <li class="preset-item">
+            <div>
+              <div class="preset-name">Gemini 3.1 Pro</div>
+              <div class="preset-provider">Google · 2M 上下文</div>
+            </div>
+            <span class="preset-id">gemini-3.1-pro</span>
+          </li>
+        </ul>
+      </div>
+
+      <div class="preset-col">
+        <div class="preset-col-head">
+          <div class="preset-icon image">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          </div>
+          <div>
+            <h4>生图模型</h4>
+            <p>高质量图像生成</p>
+          </div>
+        </div>
+        <ul class="preset-list">
+          <li class="preset-item">
+            <div>
+              <div class="preset-name">GPT Image 2</div>
+              <div class="preset-provider">OpenAI · 高质量</div>
+            </div>
+            <span class="preset-id">gpt-image-2</span>
+          </li>
+          <li class="preset-item">
+            <div>
+              <div class="preset-name">Nano Banana 2</div>
+              <div class="preset-provider">Google · 快速生成</div>
+            </div>
+            <span class="preset-id">gemini-3.1-flash-image</span>
+          </li>
+          <li class="preset-item">
+            <div>
+              <div class="preset-name">Seedream 4</div>
+              <div class="preset-provider">ByteDance · 创意生成</div>
+            </div>
+            <span class="preset-id">seedream-4.0</span>
+          </li>
+        </ul>
+      </div>
+
+      <div class="preset-col">
+        <div class="preset-col-head">
+          <div class="preset-icon tts">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>
+          </div>
+          <div>
+            <h4>TTS 配音</h4>
+            <p>高质量语音合成</p>
+          </div>
+        </div>
+        <ul class="preset-list">
+          <li class="preset-item">
+            <div>
+              <div class="preset-name">speech-2.8-hd</div>
+              <div class="preset-provider">Hailuo AI · 高清音质</div>
+            </div>
+            <span class="preset-id">speech-2.8-hd</span>
+          </li>
+          <li class="preset-item">
+            <div>
+              <div class="preset-name">Gemini TTS Preview</div>
+              <div class="preset-provider">Google · 预览版</div>
+            </div>
+            <span class="preset-id">gemini-3.1-flash-tts-preview</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════ VIDEO WORKFLOW ═══════════════ -->
+  <section class="section" style="padding-top: 0;">
+    <div class="section-header">
+      <span class="section-label">AI 视频生成</span>
+      <h2>五步生成教学视频</h2>
+      <p>从幻灯片生成到最终合成，AI 全自动完成教学视频制作。</p>
+    </div>
+
+    <div class="workflow">
+      <div class="workflow-step">
+        <div class="workflow-num">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        </div>
+        <h4>生成幻灯片</h4>
+        <p>AI 根据题目与需求自动生成教学幻灯片</p>
+      </div>
+      <div class="workflow-step">
+        <div class="workflow-num">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/></svg>
+        </div>
+        <h4>圈点动画</h4>
+        <p>在关键位置添加圈点标注动画</p>
+      </div>
+      <div class="workflow-step">
+        <div class="workflow-num">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        </div>
+        <h4>互动环节</h4>
+        <p>AI 设计互动问题，提升参与感</p>
+      </div>
+      <div class="workflow-step">
+        <div class="workflow-num">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>
+        </div>
+        <h4>AI 配音</h4>
+        <p>自动生成高质量 TTS 语音</p>
+      </div>
+      <div class="workflow-step">
+        <div class="workflow-num">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+        </div>
+        <h4>组织合成</h4>
+        <p>AI 整合素材并输出最终视频</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════ TECH STACK ═══════════════ -->
+  <section class="section" id="tech" style="padding-top: 0;">
+    <div class="section-header">
+      <span class="section-label">技术栈</span>
+      <h2>现代前端工程实践</h2>
+      <p>采用业界领先的工具链，TypeScript 全栈、Notion 风格设计系统。</p>
+    </div>
+
+    <div class="tech-grid">
+      <div class="tech-item">
+        <div class="tech-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+        <div><div class="tech-name">Next.js 16.2</div><div class="tech-desc">App Router · RSC</div></div>
+      </div>
+      <div class="tech-item">
+        <div class="tech-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="2"/><path d="M12 2a10 10 0 0110 10M2 12a10 10 0 0110-10"/></svg></div>
+        <div><div class="tech-name">React 19</div><div class="tech-desc">UI 框架</div></div>
+      </div>
+      <div class="tech-item">
+        <div class="tech-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 17V7M9 7l6 10"/></svg></div>
+        <div><div class="tech-name">TypeScript 5.7</div><div class="tech-desc">类型安全</div></div>
+      </div>
+      <div class="tech-item">
+        <div class="tech-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 19l7-7-7-7M19 12H5"/></svg></div>
+        <div><div class="tech-name">Tailwind CSS 3.4</div><div class="tech-desc">原子化样式</div></div>
+      </div>
+      <div class="tech-item">
+        <div class="tech-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/></svg></div>
+        <div><div class="tech-name">Framer Motion</div><div class="tech-desc">动画库</div></div>
+      </div>
+      <div class="tech-item">
+        <div class="tech-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg></div>
+        <div><div class="tech-name">KaTeX</div><div class="tech-desc">数学公式渲染</div></div>
+      </div>
+      <div class="tech-item">
+        <div class="tech-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-5"/></svg></div>
+        <div><div class="tech-name">Lucide React</div><div class="tech-desc">图标库</div></div>
+      </div>
+      <div class="tech-item">
+        <div class="tech-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg></div>
+        <div><div class="tech-name">PostCSS</div><div class="tech-desc">CSS 后处理</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════ STRUCTURE ═══════════════ -->
+  <section class="section" style="padding-top: 0;">
+    <div class="section-header">
+      <span class="section-label">项目结构</span>
+      <h2>清晰的代码组织</h2>
+      <p>采用 Next.js App Router 约定，组件化拆分，关注点分离。</p>
+    </div>
+
+    <div class="code-block">
+<span class="dir">app/</span>                          <span class="comment"># App Router 页面</span>
+  <span class="dir">data/</span>
+    <span class="file">page.tsx</span>                  <span class="comment"># 数据管理页（合集/题目/上传识别）</span>
+  <span class="dir">video/</span>
+    <span class="file">page.tsx</span>                  <span class="comment"># 视频创作页（向导 + 模型选择）</span>
+  <span class="file">page.tsx</span>                      <span class="comment"># 首页（AI 对话）</span>
+  <span class="file">layout.tsx</span>                    <span class="comment"># 根布局（含 KaTeX CSS）</span>
+  <span class="file">globals.css</span>                   <span class="comment"># 全局样式</span>
+<span class="dir">components/</span>                      <span class="comment"># 通用组件</span>
+  <span class="file">ChatArea.tsx</span>                  <span class="comment"># 对话区（输入框 / 工具栏 / 快捷操作）</span>
+  <span class="file">Sidebar.tsx</span>                   <span class="comment"># 侧边栏（导航 / 笔记 / bottomSlot）</span>
+  <span class="file">TextbookSelector.tsx</span>          <span class="comment"># 课本选择器（Portal 独立窗口）</span>
+  <span class="file">ModelSelector.tsx</span>             <span class="comment"># 对话模型选择下拉</span>
+  <span class="file">ModelsPanel.tsx</span>               <span class="comment"># 模型管理面板（Tab 分类）</span>
+  <span class="file">SettingsModal.tsx</span>             <span class="comment"># 设置弹窗（移动端全屏）</span>
+  <span class="file">Math.tsx</span>                      <span class="comment"># LaTeX 块级公式组件</span>
+  <span class="file">LaTeXText.tsx</span>                 <span class="comment"># LaTeX 行内公式解析</span>
+  <span class="file">Logo.tsx</span>                      <span class="comment"># 品牌 Logo</span>
+<span class="dir">lib/</span>                             <span class="comment"># 工具与类型</span>
+  <span class="file">api.ts</span>                        <span class="comment"># 后端 API 调用封装</span>
+  <span class="file">types.ts</span>                      <span class="comment"># 共享类型定义</span>
+  <span class="file">useModelConfigs.ts</span>            <span class="comment"># 模型配置 Hook</span>
+<span class="dir">server/</span>                          <span class="comment"># 后端服务</span>
+  <span class="file">package.json</span>
+  <span class="dir">src/</span>
+<span class="file">public/</span>                          <span class="comment"># 静态资源</span>
+<span class="file">package.json</span>                      <span class="comment"># 项目配置</span>
+<span class="file">next.config.ts</span>                    <span class="comment"># Next.js 配置</span>
+<span class="file">tailwind.config.ts</span>                <span class="comment"># Tailwind + Notion 设计系统</span>
+<span class="file">tsconfig.json</span>                     <span class="comment"># TypeScript 配置</span>
+    </div>
+  </section>
+
+  <!-- ═══════════════ GET STARTED ═══════════════ -->
+  <section class="section" id="start" style="padding-top: 0;">
+    <div class="section-header">
+      <span class="section-label">快速开始</span>
+      <h2>三步运行项目</h2>
+      <p>克隆仓库、安装依赖、启动开发服务器。</p>
+    </div>
+
+    <div class="get-started-grid">
+      <div class="step-card">
+        <div class="step-num">1</div>
+        <h4>克隆仓库</h4>
+        <p>从 GitHub 克隆项目到本地</p>
+        <code class="step-code"><span class="prompt">$</span> git clone https://github.com/modemw3294/Wisector-LearnLM-Alpha.git</code>
+      </div>
+      <div class="step-card">
+        <div class="step-num">2</div>
+        <h4>安装依赖</h4>
+        <p>使用 npm 或 yarn / pnpm 安装</p>
+        <code class="step-code"><span class="prompt">$</span> cd Wisector-LearnLM-Alpha<br/><span class="prompt">$</span> npm install</code>
+      </div>
+      <div class="step-card">
+        <div class="step-num">3</div>
+        <h4>启动开发</h4>
+        <p>运行开发服务器，访问 localhost</p>
+        <code class="step-code"><span class="prompt">$</span> npm run dev<br/><span class="comment"># 访问 http://localhost:3000</span></code>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════ CTA ═══════════════ -->
+  <section class="cta">
+    <div class="cta-inner">
+      <h2>开始你的 AI 学习之旅</h2>
+      <p>Wisector LearnLM 完全开源，欢迎 Star、Fork、提交 Issue 与 PR。<br/>让我们一起打造更好的学习工具。</p>
+      <div class="cta-actions">
+        <a href="https://github.com/modemw3294/Wisector-LearnLM-Alpha" target="_blank" rel="noopener" class="btn btn-primary">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.26.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.84 1.236 1.84 1.236 1.07 1.835 2.807 1.305 3.492.998.108-.776.418-1.305.762-1.605-2.665-.3-5.467-1.332-5.467-5.93 0-1.31.467-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.4 3-.405 1.02.005 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12z"/></svg>
+          在 GitHub 上查看
+        </a>
+        <a href="https://github.com/modemw3294/Wisector-LearnLM-Alpha/fork" target="_blank" rel="noopener" class="btn btn-secondary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 012 2v7M6 9v6a2 2 0 002 2h9"/></svg>
+          Fork 项目
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════ FOOTER ═══════════════ -->
+  <footer>
+    <div class="footer-brand">
+      <span class="footer-brand-icon"></span>
+      <span class="footer-brand-name">Wisector LearnLM</span>
+    </div>
+    <p>开源 AI 学习助手 · 基于 Next.js 构建</p>
+    <div class="footer-links">
+      <a href="https://github.com/modemw3294/Wisector-LearnLM-Alpha" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.26.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.84 1.236 1.84 1.236 1.07 1.835 2.807 1.305 3.492.998.108-.776.418-1.305.762-1.605-2.665-.3-5.467-1.332-5.467-5.93 0-1.31.467-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.4 3-.405 1.02.005 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12z"/></svg>
+        GitHub
+      </a>
+      <a href="https://github.com/modemw3294/Wisector-LearnLM-Alpha/issues" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Issues
+      </a>
+      <a href="https://github.com/modemw3294/Wisector-LearnLM-Alpha/blob/main/LICENSE" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><path d="M21 12c-1 0-3-1-3-3s2-3 3-3 3 1 3 3-2 3-3 3"/><path d="M3 12c1 0 3-1 3-3S4 6 3 6 0 7 0 9s2 3 3 3"/></svg>
+        MIT License
+      </a>
+    </div>
+    <p style="margin-top: 18px; font-size: 12px;">© 2026 Wisector · 用 SVG 构建而非 emoji</p>
+  </footer>
+
+</body>
+</html>

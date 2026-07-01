@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --accent: #2563eb;
+  --accent-light: #ffffff;
+  --accent-ring: #e4e3e3;
+}
+
 * {
   box-sizing: border-box;
 }

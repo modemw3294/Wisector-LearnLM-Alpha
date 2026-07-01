@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  ArrowLeft,
   BookOpen,
   FileText,
   Plus,
@@ -23,9 +22,14 @@ import {
   FolderOpen,
   Sparkles,
   FileCheck,
-  BookText,
+  Menu,
+  Database,
 } from "lucide-react";
-import LaTeXText from "@/components/LaTeXText";
+import Sidebar from "@/components/Sidebar";
+import SettingsModal from "@/components/SettingsModal";
+import DevLogPanel from "@/components/DevLogPanel";
+import { api } from "@/lib/api";
+import { useModelConfigs } from "@/lib/useModelConfigs";
 
 /* ──────────────────────────  类型  ────────────────────────── */
 
@@ -38,6 +42,17 @@ interface TextbookItem {
   grade: string;
   chapters: number;
   uploadedAt: string;
+  status?: "analyzing" | "ready" | "error";
+  catalog?: CatalogEntry[];
+  outline?: string;
+  taskId?: string;
+  sourceFile?: string;
+}
+
+interface CatalogEntry {
+  title: string;
+  page?: number;
+  children?: CatalogEntry[];
 }
 
 type QuestionType = "选择题" | "填空题" | "解答题" | "判断题";
@@ -67,32 +82,7 @@ interface Collection {
 
 /* ──────────────────────────  占位数据  ────────────────────────── */
 
-const TEXTBOOKS: TextbookItem[] = [
-  { id: "tb-1", name: "人教版 · 七年级数学（上）", subject: "数学", grade: "七年级", chapters: 12, uploadedAt: "2026-06-10" },
-  { id: "tb-2", name: "人教版 · 八年级数学（上）", subject: "数学", grade: "八年级", chapters: 14, uploadedAt: "2026-06-08" },
-  { id: "tb-3", name: "教科版 · 九年级物理", subject: "物理", grade: "九年级", chapters: 10, uploadedAt: "2026-06-05" },
-];
-
-const INITIAL_COLLECTIONS: Collection[] = [
-  { id: "col-1", name: "2025 期末数学模拟卷", sourceFile: "math_final_2025.pdf", subject: "数学", questionCount: 3, uploadedAt: "2026-06-12" },
-];
-
-const INITIAL_QUESTIONS: QuestionItem[] = [
-  { id: "q-1", title: "已知 $a + b = 5$，$ab = 6$，求 $a^2 + b^2$ 的值", subject: "数学", type: "解答题", difficulty: "中等", answer: "$a^2 + b^2 = (a+b)^2 - 2ab = 25 - 12 = 13$", collectionId: "col-1", updatedAt: "2026-06-12" },
-  { id: "q-2", title: "下列关于力的说法正确的是", subject: "物理", type: "选择题", difficulty: "简单", answer: "B. 力是改变物体运动状态的原因", updatedAt: "2026-06-11" },
-  { id: "q-3", title: "光合作用的化学方程式为______", subject: "生物", type: "填空题", difficulty: "简单", answer: "$6CO_2 + 6H_2O \\xrightarrow{光照} C_6H_{12}O_6 + 6O_2$", updatedAt: "2026-06-09" },
-  { id: "q-4", title: "一元二次方程 $ax^2 + bx + c = 0$（$a \\neq 0$）的求根公式推导", subject: "数学", type: "解答题", difficulty: "困难", answer: "$$x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$$", collectionId: "col-1", updatedAt: "2026-06-12" },
-];
-
-const SUBJECTS = ["全部", "数学", "物理", "化学", "英语", "语文", "生物", "信息技术"];
-
-/** AI 识别用的多模态模型 */
-const MULTIMODAL_MODELS = [
-  { id: "claude-opus-4.8", name: "Claude Opus 4.8" },
-  { id: "claude-sonnet-4.6", name: "Claude Sonnet 4.6" },
-  { id: "gemini-3.1-pro", name: "Gemini 3.1 Pro" },
-  { id: "gpt-5.5", name: "GPT-5.5" },
-];
+const SUBJECTS = ["全部", "数学", "物理", "化学", "英语", "语文", "生物", "信息技术", "政治", "历史", "地理"];
 
 /* ──────────────────────────  页面  ────────────────────────── */
 
@@ -102,35 +92,103 @@ export default function DataPage() {
   const [subjectFilter, setSubjectFilter] = useState("全部");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
+  // 侧边栏状态
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
   // 合集 + 题目状态
-  const [textbooks, setTextbooks] = useState<TextbookItem[]>(TEXTBOOKS);
-  const [collections, setCollections] = useState<Collection[]>(INITIAL_COLLECTIONS);
-  const [questions, setQuestions] = useState<QuestionItem[]>(INITIAL_QUESTIONS);
+  const [textbooks, setTextbooks] = useState<TextbookItem[]>([]);
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [questions, setQuestions] = useState<QuestionItem[]>([]);
   const [expandedCollections, setExpandedCollections] = useState<Set<string>>(new Set());
+  const [dataLoading, setDataLoading] = useState(true);
 
   // 上传弹窗
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [textbookUploadOpen, setTextbookUploadOpen] = useState(false);
 
   // 编辑弹窗
   const [editTextbook, setEditTextbook] = useState<TextbookItem | null>(null);
   const [editQuestion, setEditQuestion] = useState<QuestionItem | null>(null);
 
+  // 课本详情
+  const [detailTextbook, setDetailTextbook] = useState<TextbookItem | null>(null);
+
+  // 加载数据
+  const loadData = useCallback(async () => {
+    try {
+      const [tbs, cols, qs] = await Promise.all([
+        api.listTextbooks(),
+        api.listCollections(),
+        api.listQuestions(),
+      ]);
+      setTextbooks(tbs as TextbookItem[]);
+      setCollections(cols as Collection[]);
+      setQuestions(qs as QuestionItem[]);
+    } catch {
+      // 加载失败保持空数组
+    } finally {
+      setDataLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // 轮询正在分析的课本
+  const hasAnalyzing = textbooks.some((t) => t.status === "analyzing");
+  useEffect(() => {
+    if (!hasAnalyzing) return;
+    const timer = setInterval(async () => {
+      const tbs = await api.listTextbooks();
+      setTextbooks(tbs as TextbookItem[]);
+      // 如果详情课本在分析中，也更新详情
+      if (detailTextbook) {
+        const updated = (tbs as TextbookItem[]).find((t) => t.id === detailTextbook.id);
+        if (updated) setDetailTextbook(updated);
+      }
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [hasAnalyzing, detailTextbook]);
+
   // 保存课本
-  const handleSaveTextbook = (updated: TextbookItem) => {
-    setTextbooks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+  const handleSaveTextbook = async (updated: TextbookItem) => {
+    try {
+      await api.updateTextbook(updated.id, updated);
+      setTextbooks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+    } catch {
+      alert("保存失败");
+    }
     setEditTextbook(null);
   };
-  const handleDeleteTextbook = (id: string) => {
-    setTextbooks((prev) => prev.filter((t) => t.id !== id));
+  const handleDeleteTextbook = async (id: string) => {
+    try {
+      await api.deleteTextbook(id);
+      setTextbooks((prev) => prev.filter((t) => t.id !== id));
+    } catch {
+      alert("删除失败");
+    }
   };
 
   // 保存题目
-  const handleSaveQuestion = (updated: QuestionItem) => {
-    setQuestions((prev) => prev.map((q) => (q.id === updated.id ? updated : q)));
+  const handleSaveQuestion = async (updated: QuestionItem) => {
+    try {
+      await api.updateQuestion(updated.id, updated);
+      setQuestions((prev) => prev.map((q) => (q.id === updated.id ? updated : q)));
+    } catch {
+      alert("保存失败");
+    }
     setEditQuestion(null);
   };
-  const handleDeleteQuestion = (id: string) => {
-    setQuestions((prev) => prev.filter((q) => q.id !== id));
+  const handleDeleteQuestion = async (id: string) => {
+    try {
+      await api.deleteQuestion(id);
+      setQuestions((prev) => prev.filter((q) => q.id !== id));
+    } catch {
+      alert("删除失败");
+    }
   };
 
   const toggleCollection = (id: string) => {
@@ -162,44 +220,65 @@ export default function DataPage() {
     return matchQuery && matchSubject;
   });
 
-  // 处理上传完成：AI 识别后添加合集+题目
-  const handleUploadComplete = (
-    collectionName: string,
-    sourceFile: string,
-    subject: string,
-    recognizedQuestions: QuestionItem[]
+  // 处理上传完成：API 已创建合集+题目，重新加载数据
+  const handleUploadComplete = async (
+    _collectionName: string,
+    _sourceFile: string,
+    _subject: string,
+    _recognizedQuestions: QuestionItem[]
   ) => {
-    const colId = `col-${Date.now()}`;
-    const col: Collection = {
-      id: colId,
-      name: collectionName,
-      sourceFile,
-      subject,
-      questionCount: recognizedQuestions.length,
-      uploadedAt: new Date().toISOString().slice(0, 10),
-    };
-    setCollections((prev) => [col, ...prev]);
-    setQuestions((prev) => [
-      ...recognizedQuestions.map((q) => ({ ...q, collectionId: colId })),
-      ...prev,
-    ]);
-    // 自动展开新合集
-    setExpandedCollections((prev) => new Set(prev).add(colId));
+    // 重新从 API 加载数据
+    try {
+      const [cols, qs] = await Promise.all([
+        api.listCollections(),
+        api.listQuestions(),
+      ]);
+      setCollections(cols as Collection[]);
+      setQuestions(qs as QuestionItem[]);
+      // 展开最新合集
+      if (cols.length > 0) {
+        setExpandedCollections((prev) => new Set(prev).add((cols[0] as Collection).id));
+      }
+    } catch {
+      // ignore
+    }
     setUploadOpen(false);
   };
 
   return (
-    <div className="min-h-screen bg-notion-bg">
-      <header className="sticky top-0 z-30 flex items-center gap-3 px-4 md:px-8 h-14 bg-white/80 backdrop-blur-md border-b border-notion-border">
-        <a href="/" className="flex items-center gap-1.5 h-8 px-2 rounded-md text-sm text-notion-text2 hover:bg-notion-overlay2 transition-colors">
-          <ArrowLeft className="w-4 h-4" strokeWidth={1.75} />
-          <span className="hidden sm:inline">返回</span>
-        </a>
-        <div className="w-px h-5 bg-notion-border2" />
-        <h1 className="text-base font-semibold text-notion-text tracking-tight">数据管理</h1>
-      </header>
+    <main className="flex h-screen bg-notion-bg overflow-hidden">
+      <Sidebar
+        onOpenSettings={() => setSettingsOpen(true)}
+        mobileOpen={mobileSidebarOpen}
+        onMobileClose={() => setMobileSidebarOpen(false)}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
+      />
 
-      <div className="max-w-[1024px] mx-auto px-4 md:px-8 py-6">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <header className="h-14 shrink-0 z-30 flex items-center justify-between px-4 md:px-8 bg-white/60 backdrop-blur-sm border-b border-notion-border">
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={() => setMobileSidebarOpen(true)}
+              className="md:hidden w-8 h-8 rounded-md flex items-center justify-center text-notion-text2 hover:bg-notion-overlay2 transition-colors"
+              aria-label="打开侧边栏"
+            >
+              <Menu className="w-4 h-4" strokeWidth={1.75} />
+            </button>
+            <Database className="w-4 h-4 text-accent" strokeWidth={1.75} />
+            <h1 className="text-sm font-semibold text-notion-text tracking-tight">数据管理</h1>
+          </div>
+        </header>
+
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-[1024px] mx-auto px-4 md:px-8 py-6">
+        {dataLoading ? (
+          <div className="flex items-center justify-center h-40 text-sm text-notion-text4">
+            <Loader2 className="w-5 h-5 animate-spin mr-2" />
+            加载中…
+          </div>
+        ) : (
+        <>
         {/* Tab 切换 */}
         <div className="flex items-center gap-1 mb-6">
           <TabButton active={tab === "textbooks"} onClick={() => setTab("textbooks")} icon={<BookOpen className="w-4 h-4" strokeWidth={1.75} />} label="课本" count={textbooks.length} />
@@ -227,7 +306,10 @@ export default function DataPage() {
               上传试卷识别
             </button>
           ) : (
-            <button className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md bg-notion-text text-white text-sm font-medium hover:opacity-90 transition-opacity whitespace-nowrap">
+            <button
+              onClick={() => setTextbookUploadOpen(true)}
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md bg-notion-text text-white text-sm font-medium hover:opacity-90 transition-opacity whitespace-nowrap"
+            >
               <Plus className="w-4 h-4" strokeWidth={2} />
               上传课本
             </button>
@@ -239,26 +321,48 @@ export default function DataPage() {
           {tab === "textbooks" ? (
             <motion.div key="textbooks" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.15 }}>
               {filteredTextbooks.length === 0 ? (
-                <EmptyState icon={<BookOpen className="w-8 h-8" strokeWidth={1.5} />} title="还没有课本" hint="点击右上角「上传课本」开始添加" />
+                <EmptyState icon={<BookOpen className="w-8 h-8" strokeWidth={1.5} />} title="还没有课本" hint="上传 PDF 课本，AI 将自动分析目录与大纲" />
               ) : (
                 <div className="space-y-1.5">
                   {filteredTextbooks.map((tb) => (
-                    <div key={tb.id} className="group relative flex items-center gap-3 px-3 py-2.5 rounded-md bg-white border border-notion-border2 hover:border-notion-text3 transition-colors">
-                      <div className="w-9 h-9 rounded-md bg-blue-50 text-blue-700 flex items-center justify-center shrink-0">
+                    <div
+                      key={tb.id}
+                      onClick={() => setDetailTextbook(tb)}
+                      className="group relative flex items-center gap-3 px-3 py-2.5 rounded-md bg-white border border-notion-border2 hover:border-notion-text3 transition-colors cursor-pointer"
+                    >
+                      <div className="w-9 h-9 rounded-md bg-accent-light/60 text-accent flex items-center justify-center shrink-0">
                         <BookOpen className="w-4 h-4" strokeWidth={1.75} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium text-notion-text tracking-tight truncate">{tb.name}</div>
                         <div className="text-xs text-notion-text3 mt-0.5">{[tb.subject, tb.grade, `${tb.chapters} 章节`].join(" · ")}</div>
                       </div>
+                      {tb.status === "analyzing" && (
+                        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-accent-light/60 text-accent font-medium shrink-0">
+                          <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                          分析中
+                        </span>
+                      )}
+                      {tb.status === "ready" && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-50 text-green-700 font-medium shrink-0">
+                          已分析
+                        </span>
+                      )}
+                      {tb.status === "error" && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-700 font-medium shrink-0">
+                          分析失败
+                        </span>
+                      )}
                       <div className="text-xs text-notion-text4 shrink-0">{tb.uploadedAt}</div>
-                      <RowMenu
-                        id={tb.id}
-                        openMenuId={openMenuId}
-                        setOpenMenuId={setOpenMenuId}
-                        onEdit={() => setEditTextbook(tb)}
-                        onDelete={() => handleDeleteTextbook(tb.id)}
-                      />
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <RowMenu
+                          id={tb.id}
+                          openMenuId={openMenuId}
+                          setOpenMenuId={setOpenMenuId}
+                          onEdit={() => setEditTextbook(tb)}
+                          onDelete={() => handleDeleteTextbook(tb.id)}
+                        />
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -282,11 +386,42 @@ export default function DataPage() {
             </motion.div>
           )}
         </AnimatePresence>
+        </>
+        )}
+          </div>
+        </div>
+        <div className="shrink-0 px-4 md:px-8 py-2 border-t border-notion-border bg-white/60">
+          <DevLogPanel />
+        </div>
       </div>
 
       {/* 上传弹窗 */}
       {uploadOpen && (
         <UploadModal onClose={() => setUploadOpen(false)} onComplete={handleUploadComplete} />
+      )}
+
+      {/* 课本上传弹窗 */}
+      {textbookUploadOpen && (
+        <TextbookUploadModal
+          onClose={() => setTextbookUploadOpen(false)}
+          onComplete={async () => {
+            setTextbookUploadOpen(false);
+            await loadData();
+          }}
+        />
+      )}
+
+      {/* 课本详情弹窗 */}
+      {detailTextbook && (
+        <TextbookDetailModal
+          textbook={detailTextbook}
+          onClose={() => setDetailTextbook(null)}
+          onSave={async (updated) => {
+            await api.updateTextbook(updated.id, updated);
+            setTextbooks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+            setDetailTextbook(updated);
+          }}
+        />
       )}
 
       {/* 编辑弹窗 */}
@@ -306,7 +441,10 @@ export default function DataPage() {
           onSave={(updated) => handleSaveQuestion(updated as QuestionItem)}
         />
       )}
-    </div>
+
+      {/* 设置弹窗 */}
+      <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+    </main>
   );
 }
 
@@ -342,7 +480,7 @@ function QuestionsList({
       <EmptyState
         icon={<FileQuestion className="w-8 h-8" strokeWidth={1.5} />}
         title="还没有题目"
-        hint="点击右上角「上传试卷识别」，AI 将自动提取题目"
+        hint="上传试卷，AI 将自动识别题目、判断题型与难度，整理成合集"
       />
     );
   }
@@ -493,48 +631,89 @@ function UploadModal({
   onClose: () => void;
   onComplete: (name: string, sourceFile: string, subject: string, questions: QuestionItem[]) => void;
 }) {
+  const { models } = useModelConfigs();
+  const enabledModels = models.filter((m) => m.enabled);
   const [stage, setStage] = useState<UploadStage>("upload");
   const [file, setFile] = useState<File | null>(null);
+  const [fileContent, setFileContent] = useState<string>("");
   const [collectionName, setCollectionName] = useState("");
   const [subject, setSubject] = useState("数学");
-  const [modelId, setModelId] = useState(MULTIMODAL_MODELS[0].id);
+  const [modelId, setModelId] = useState("");
   const [recognizeStep, setRecognizeStep] = useState(0);
   const [recognizedQuestions, setRecognizedQuestions] = useState<QuestionItem[]>([]);
+  const [recognizeError, setRecognizeError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
 
   const RECOGNIZE_STEPS = ["上传文件", "AI 识别题目", "判断题型与难度", "整理完成"];
 
+  // 默认选第一个模型
+  useEffect(() => {
+    if (enabledModels.length > 0 && !modelId) {
+      setModelId(enabledModels[0].id);
+    }
+  }, [enabledModels, modelId]);
+
   useState(() => {
     setMounted(true);
   });
 
-  // 模拟 AI 识别进度
-  const startRecognize = () => {
+  // 真实 AI 识别
+  const startRecognize = async () => {
+    if (!fileContent || !modelId) return;
     setStage("recognizing");
     setRecognizeStep(0);
+    setRecognizeError(null);
+
+    // 推进步骤动画
     const stepTimer = setInterval(() => {
-      setRecognizeStep((prev) => {
-        if (prev >= RECOGNIZE_STEPS.length - 1) {
-          clearInterval(stepTimer);
-          // 生成模拟识别结果
-          const mockQuestions: QuestionItem[] = generateMockQuestions();
-          setRecognizedQuestions(mockQuestions);
-          setTimeout(() => setStage("done"), 500);
-          return prev;
-        }
-        return prev + 1;
+      setRecognizeStep((prev) => Math.min(prev + 1, RECOGNIZE_STEPS.length - 2));
+    }, 1000);
+
+    try {
+      const result = await api.recognizeQuestions({
+        content: fileContent,
+        subject,
+        model: modelId,
+        collectionName: collectionName || file?.name || "未命名合集",
       });
-    }, 1200);
+
+      clearInterval(stepTimer);
+      setRecognizeStep(RECOGNIZE_STEPS.length - 1);
+
+      const questions: QuestionItem[] = (result.questions || []).map((q: any) => ({
+        id: q.id,
+        title: q.title,
+        subject: q.subject,
+        type: q.type,
+        difficulty: q.difficulty,
+        answer: q.answer,
+        collectionId: q.collectionId,
+        updatedAt: q.updatedAt,
+      }));
+      setRecognizedQuestions(questions);
+      setTimeout(() => setStage("done"), 500);
+    } catch (err) {
+      clearInterval(stepTimer);
+      setRecognizeError(err instanceof Error ? err.message : "AI 识别失败");
+      setStage("config");
+    }
   };
 
-  const handleFileChange = (f: File | null) => {
+  const handleFileChange = async (f: File | null) => {
     if (!f) return;
     setFile(f);
     // 自动填充合集名
     const baseName = f.name.replace(/\.[^.]+$/, "");
     setCollectionName(baseName);
+    // 读取文件内容（文本文件）
+    try {
+      const text = await f.text();
+      setFileContent(text.slice(0, 100000)); // 限制 100KB
+    } catch {
+      setFileContent("");
+    }
     setStage("config");
   };
 
@@ -575,7 +754,7 @@ function UploadModal({
           {/* 头部 */}
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-notion-border">
             <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-blue-600" strokeWidth={1.75} />
+              <Sparkles className="w-4 h-4 text-accent" strokeWidth={1.75} />
               <span className="text-sm font-semibold text-notion-text tracking-tight">
                 上传试卷 · AI 识别题目
               </span>
@@ -595,10 +774,10 @@ function UploadModal({
                   onDrop={handleDrop}
                   onClick={() => fileInputRef.current?.click()}
                   className={`flex flex-col items-center justify-center gap-3 py-12 rounded-xl border-2 border-dashed cursor-pointer transition-colors ${
-                    dragging ? "border-blue-400 bg-blue-50/50" : "border-notion-border2 hover:border-notion-text3 hover:bg-notion-overlay2"
+                    dragging ? "border-accent-ring bg-accent-light/50" : "border-notion-border2 hover:border-notion-text3 hover:bg-notion-overlay2"
                   }`}
                 >
-                  <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-700 flex items-center justify-center">
+                  <div className="w-12 h-12 rounded-full bg-accent-light/60 text-accent flex items-center justify-center">
                     <Upload className="w-6 h-6" strokeWidth={1.75} />
                   </div>
                   <div className="text-center">
@@ -669,15 +848,22 @@ function UploadModal({
                     onChange={(e) => setModelId(e.target.value)}
                     className="w-full h-9 px-3 rounded-md bg-white border border-notion-border2 text-sm text-notion-text focus:outline-none focus:border-notion-text2 transition-colors"
                   >
-                    {MULTIMODAL_MODELS.map((m) => (
-                      <option key={m.id} value={m.id}>{m.name}</option>
-                    ))}
+                    {enabledModels.length === 0 ? (
+                      <option value="">请先在设置中配置模型</option>
+                    ) : (
+                      enabledModels.map((m) => (
+                        <option key={m.id} value={m.id}>{m.displayName}</option>
+                      ))
+                    )}
                   </select>
+                  {recognizeError && (
+                    <div className="mt-2 text-xs text-red-600">{recognizeError}</div>
+                  )}
                 </div>
 
                 {/* 说明 */}
-                <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-50/50 border border-blue-100">
-                  <AlertCircle className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" strokeWidth={1.75} />
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-accent-light/40 border border-accent-ring/40">
+                  <AlertCircle className="w-4 h-4 text-accent shrink-0 mt-0.5" strokeWidth={1.75} />
                   <div className="text-xs text-notion-text2 leading-relaxed">
                     AI 将自动识别试卷中的每道题目，判断其题型（选择题 / 填空题 / 解答题 / 判断题）和难度等级（简单 / 中等 / 困难），并整理为合集。
                   </div>
@@ -691,7 +877,7 @@ function UploadModal({
                   <button
                     onClick={startRecognize}
                     disabled={!collectionName.trim()}
-                    className="h-8 px-4 rounded-md bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 disabled:opacity-40 transition-colors inline-flex items-center gap-1.5"
+                    className="h-8 px-4 rounded-md bg-accent text-white text-sm font-medium hover:opacity-90 disabled:opacity-40 transition-opacity inline-flex items-center gap-1.5"
                   >
                     <Sparkles className="w-3.5 h-3.5" strokeWidth={1.75} />
                     开始识别
@@ -704,7 +890,7 @@ function UploadModal({
             {stage === "recognizing" && (
               <div className="py-8">
                 <div className="flex flex-col items-center text-center mb-6">
-                  <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-3" strokeWidth={1.5} />
+                  <Loader2 className="w-10 h-10 text-accent animate-spin mb-3" strokeWidth={1.5} />
                   <div className="text-sm font-medium text-notion-text">AI 正在识别题目…</div>
                   <div className="text-xs text-notion-text3 mt-1">{file?.name}</div>
                 </div>
@@ -715,7 +901,7 @@ function UploadModal({
                     const isCurrent = i === recognizeStep;
                     return (
                       <div key={s} className={`flex items-center gap-3 px-3 py-2.5 rounded-md border transition-colors ${
-                        isDone ? "border-green-200 bg-green-50/30" : isCurrent ? "border-blue-200 bg-blue-50/50" : "border-notion-border2 bg-white"
+                        isDone ? "border-green-200 bg-green-50/30" : isCurrent ? "border-accent-ring/60 bg-accent-light/40" : "border-notion-border2 bg-white"
                       }`}>
                         <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0">
                           {isDone ? (
@@ -723,7 +909,7 @@ function UploadModal({
                               <Check className="w-4 h-4" strokeWidth={2.5} />
                             </div>
                           ) : isCurrent ? (
-                            <Loader2 className="w-5 h-5 text-blue-600 animate-spin" strokeWidth={2} />
+                            <Loader2 className="w-5 h-5 text-accent animate-spin" strokeWidth={2} />
                           ) : (
                             <div className="w-7 h-7 rounded-full bg-notion-overlay2 text-notion-text4 flex items-center justify-center text-xs font-medium">
                               {i + 1}
@@ -771,7 +957,7 @@ function UploadModal({
                   </button>
                   <button
                     onClick={handleConfirmDone}
-                    className="h-8 px-4 rounded-md bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 transition-colors inline-flex items-center gap-1.5"
+                    className="h-8 px-4 rounded-md bg-accent text-white text-sm font-medium hover:opacity-90 transition-opacity inline-flex items-center gap-1.5"
                   >
                     <Check className="w-3.5 h-3.5" strokeWidth={2.5} />
                     添加到合集
@@ -788,38 +974,19 @@ function UploadModal({
   return mounted ? createPortal(modal, document.body) : null;
 }
 
-/* ──────────────────────────  模拟识别结果  ────────────────────────── */
-
-function generateMockQuestions(): QuestionItem[] {
-  const templates: Omit<QuestionItem, "id" | "updatedAt">[] = [
-    { title: "已知函数 $f(x) = 2x^2 - 3x + 1$，求 $f(2)$ 的值", subject: "数学", type: "解答题", difficulty: "简单", answer: "$f(2) = 2(2)^2 - 3(2) + 1 = 8 - 6 + 1 = 3$" },
-    { title: "下列各数中，属于正数的是（　　）", subject: "数学", type: "选择题", difficulty: "简单", answer: "C. $\\frac{1}{2}$" },
-    { title: "不等式 $2x - 6 > 0$ 的解集为______", subject: "数学", type: "填空题", difficulty: "中等", answer: "$x > 3$" },
-    { title: "证明：等腰三角形底边上的高与中线重合", subject: "数学", type: "解答题", difficulty: "困难", answer: "利用 $\\triangle ABC$ 中 $AB = AC$，作 $AD \\perp BC$，证 $\\triangle ABD \\cong \\triangle ACD$（HL），得 $BD = CD$。" },
-    { title: "若 $\\sin\\alpha = \\frac{1}{2}$，则 $\\alpha$ 的可能值是（　　）", subject: "数学", type: "选择题", difficulty: "中等", answer: "B. $\\frac{\\pi}{6}$ 或 $\\frac{5\\pi}{6}$" },
-    { title: "判断：所有的直角三角形都相似（　　）", subject: "数学", type: "判断题", difficulty: "简单", answer: "错误。直角三角形的两个锐角不一定相等。" },
-  ];
-  const today = new Date().toISOString().slice(0, 10);
-  return templates.map((t, i) => ({
-    ...t,
-    id: `q-${Date.now()}-${i}`,
-    updatedAt: today,
-  }));
-}
-
 /* ──────────────────────────  通用子组件  ────────────────────────── */
 
 function TabButton({ active, onClick, icon, label, count }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string; count: number }) {
   return (
     <button
       onClick={onClick}
-      className={`inline-flex items-center gap-2 h-8 px-3 rounded-md text-sm font-medium tracking-tight transition-colors ${
+      className={`relative inline-flex items-center gap-2 h-9 px-3.5 rounded-md text-sm font-medium tracking-tight transition-colors ${
         active ? "bg-notion-overlay text-notion-text" : "text-notion-text2 hover:bg-notion-overlay2"
       }`}
     >
       {icon}
       {label}
-      <span className={`text-xs px-1.5 py-0.5 rounded ${active ? "bg-white text-notion-text3" : "bg-notion-overlay2 text-notion-text4"}`}>{count}</span>
+      <span className={`text-xs px-1.5 py-0.5 rounded-full tabular-nums ${active ? "bg-white text-notion-text3" : "bg-notion-overlay2 text-notion-text4"}`}>{count}</span>
     </button>
   );
 }
@@ -885,14 +1052,489 @@ function RowMenu({ id, openMenuId, setOpenMenuId, onEdit, onDelete }: { id: stri
   );
 }
 
-function EmptyState({ icon, title, hint }: { icon: React.ReactNode; title: string; hint: string }) {
+function EmptyState({ icon, title, hint, action }: { icon: React.ReactNode; title: string; hint: string; action?: React.ReactNode }) {
   return (
     <div className="py-16 flex flex-col items-center justify-center text-center">
-      <div className="w-14 h-14 rounded-xl bg-notion-overlay2 flex items-center justify-center text-notion-text3 mb-3">{icon}</div>
-      <div className="text-sm font-medium text-notion-text">{title}</div>
-      <div className="text-xs text-notion-text3 mt-1">{hint}</div>
+      <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-notion-overlay2 to-notion-border2 flex items-center justify-center text-notion-text3 mb-3">{icon}</div>
+      <div className="text-sm font-semibold text-notion-text">{title}</div>
+      <div className="text-xs text-notion-text3 mt-1 max-w-xs">{hint}</div>
+      {action && <div className="mt-4">{action}</div>}
     </div>
   );
+}
+
+/* ──────────────────────────  课本上传弹窗  ────────────────────────── */
+
+function TextbookUploadModal({
+  onClose,
+  onComplete,
+}: {
+  onClose: () => void;
+  onComplete: () => void;
+}) {
+  const { models } = useModelConfigs();
+  const visionModels = models.filter(
+    (m) => m.enabled && m.inputModalities?.includes("image")
+  );
+  const [stage, setStage] = useState<"upload" | "config" | "analyzing" | "done" | "error">("upload");
+  const [file, setFile] = useState<File | null>(null);
+  const [fileBase64, setFileBase64] = useState("");
+  const [subject, setSubject] = useState("数学");
+  const [grade, setGrade] = useState("");
+  const [modelId, setModelId] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+
+  useEffect(() => {
+    if (visionModels.length > 0 && !modelId) {
+      setModelId(visionModels[0].id);
+    }
+  }, [visionModels, modelId]);
+
+  useState(() => setMounted(true));
+
+  const handleFileChange = async (f: File | null) => {
+    if (!f) return;
+    if (!f.name.toLowerCase().endsWith(".pdf")) {
+      setError("请上传 PDF 文件");
+      return;
+    }
+    setError(null);
+    setFile(f);
+    // 读取为 base64
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.split(",")[1] || "";
+      setFileBase64(base64);
+    };
+    reader.readAsDataURL(f);
+    setStage("config");
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    const f = e.dataTransfer.files[0];
+    if (f) handleFileChange(f);
+  };
+
+  const startAnalysis = async () => {
+    if (!fileBase64 || !modelId) return;
+    setStage("analyzing");
+    setError(null);
+    try {
+      await api.analyzeTextbook({
+        fileName: file?.name || "未命名.pdf",
+        fileBase64,
+        subject,
+        grade: grade || undefined,
+        model: modelId,
+      });
+      setStage("done");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "分析失败");
+      setStage("error");
+    }
+  };
+
+  const modal = (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.15 }}
+        onClick={onClose}
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4"
+      >
+        <motion.div
+          initial={{ opacity: 0, scale: 0.96, y: 8 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.96, y: 8 }}
+          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-[520px] max-h-[85vh] flex flex-col bg-white rounded-xl shadow-2xl overflow-hidden"
+        >
+          {/* 头部 */}
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-notion-border">
+            <div className="flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-accent" strokeWidth={1.75} />
+              <span className="text-sm font-semibold text-notion-text tracking-tight">
+                上传课本 · AI 分析
+              </span>
+            </div>
+            <button onClick={onClose} className="w-7 h-7 rounded-md flex items-center justify-center text-notion-text2 hover:bg-notion-overlay2 transition-colors">
+              <X className="w-4 h-4" strokeWidth={1.75} />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-5">
+            {/* 阶段 1：上传文件 */}
+            {stage === "upload" && (
+              <div>
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+                  onDragLeave={() => setDragging(false)}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`flex flex-col items-center justify-center gap-3 py-12 rounded-xl border-2 border-dashed cursor-pointer transition-colors ${
+                    dragging ? "border-accent-ring bg-accent-light/50" : "border-notion-border2 hover:border-notion-text3 hover:bg-notion-overlay2"
+                  }`}
+                >
+                  <div className="w-12 h-12 rounded-full bg-accent-light/60 text-accent flex items-center justify-center">
+                    <Upload className="w-6 h-6" strokeWidth={1.75} />
+                  </div>
+                  <div className="text-center">
+                    <div className="text-sm font-medium text-notion-text">拖拽 PDF 到此或点击上传</div>
+                    <div className="text-xs text-notion-text3 mt-1">仅支持 PDF 格式</div>
+                  </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf"
+                    className="hidden"
+                    onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
+                  />
+                </div>
+                {error && <div className="mt-3 text-xs text-red-600 text-center">{error}</div>}
+              </div>
+            )}
+
+            {/* 阶段 2：配置 */}
+            {stage === "config" && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-green-50 border border-green-200">
+                  <div className="w-10 h-10 rounded-md bg-green-100 text-green-700 flex items-center justify-center shrink-0">
+                    <FileCheck className="w-5 h-5" strokeWidth={1.75} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-notion-text truncate">{file?.name}</div>
+                    <div className="text-xs text-notion-text3 mt-0.5">
+                      {file ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : ""}
+                    </div>
+                  </div>
+                  <Check className="w-4 h-4 text-green-600" strokeWidth={2.5} />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-notion-text block mb-1.5">学科</label>
+                    <select
+                      value={subject}
+                      onChange={(e) => setSubject(e.target.value)}
+                      className="w-full h-9 px-3 rounded-md bg-white border border-notion-border2 text-sm text-notion-text focus:outline-none focus:border-notion-text2 transition-colors"
+                    >
+                      {SUBJECTS.filter((s) => s !== "全部").map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-notion-text block mb-1.5">年级（可选）</label>
+                    <input
+                      value={grade}
+                      onChange={(e) => setGrade(e.target.value)}
+                      placeholder="如：高一"
+                      className="w-full h-9 px-3 rounded-md bg-white border border-notion-border2 text-sm text-notion-text placeholder:text-notion-text4 focus:outline-none focus:border-notion-text2 transition-colors"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium text-notion-text block mb-1.5">
+                    分析模型
+                    <span className="text-xs text-notion-text3 ml-1.5">需支持视觉输入</span>
+                  </label>
+                  <select
+                    value={modelId}
+                    onChange={(e) => setModelId(e.target.value)}
+                    className="w-full h-9 px-3 rounded-md bg-white border border-notion-border2 text-sm text-notion-text focus:outline-none focus:border-notion-text2 transition-colors"
+                  >
+                    {visionModels.length === 0 ? (
+                      <option value="">请先在设置中配置支持视觉的模型</option>
+                    ) : (
+                      visionModels.map((m) => (
+                        <option key={m.id} value={m.id}>{m.displayName}</option>
+                      ))
+                    )}
+                  </select>
+                </div>
+
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-accent-light/40 border border-accent-ring/40">
+                  <AlertCircle className="w-4 h-4 text-accent shrink-0 mt-0.5" strokeWidth={1.75} />
+                  <div className="text-xs text-notion-text2 leading-relaxed">
+                    AI 将分析课本 PDF，自动提取目录、生成知识大纲。分析在后台运行，完成后可查看和编辑。
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button onClick={() => setStage("upload")} className="h-8 px-3 rounded-md text-sm font-medium text-notion-text2 hover:bg-notion-overlay2 transition-colors">
+                    重新选择
+                  </button>
+                  <button
+                    onClick={startAnalysis}
+                    disabled={!fileBase64 || !modelId}
+                    className="h-8 px-4 rounded-md bg-accent text-white text-sm font-medium hover:opacity-90 disabled:opacity-40 transition-opacity inline-flex items-center gap-1.5"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" strokeWidth={1.75} />
+                    开始分析
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 阶段 3：分析中 */}
+            {stage === "analyzing" && (
+              <div className="py-8">
+                <div className="flex flex-col items-center text-center mb-6">
+                  <Loader2 className="w-10 h-10 text-accent animate-spin mb-3" strokeWidth={1.5} />
+                  <div className="text-sm font-medium text-notion-text">正在上传并启动分析…</div>
+                  <div className="text-xs text-notion-text3 mt-1">{file?.name}</div>
+                </div>
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-accent-light/40 border border-accent-ring/40">
+                  <AlertCircle className="w-4 h-4 text-accent shrink-0 mt-0.5" strokeWidth={1.75} />
+                  <div className="text-xs text-notion-text2 leading-relaxed">
+                    上传完成后分析将在后台继续运行，你可以关闭此窗口。分析完成后课本会显示"已分析"状态。
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 阶段 4：完成 */}
+            {stage === "done" && (
+              <div className="py-8">
+                <div className="flex flex-col items-center text-center mb-5">
+                  <div className="w-12 h-12 rounded-full bg-green-100 text-green-700 flex items-center justify-center mb-3">
+                    <Check className="w-6 h-6" strokeWidth={2.5} />
+                  </div>
+                  <div className="text-sm font-semibold text-notion-text">已启动分析</div>
+                  <div className="text-xs text-notion-text3 mt-1">
+                    AI 正在后台分析课本，请稍后查看
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    onClick={onComplete}
+                    className="h-8 px-4 rounded-md bg-accent text-white text-sm font-medium hover:opacity-90 transition-opacity"
+                  >
+                    完成
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 阶段 5：错误 */}
+            {stage === "error" && (
+              <div className="py-8">
+                <div className="flex flex-col items-center text-center mb-5">
+                  <div className="w-12 h-12 rounded-full bg-red-100 text-red-700 flex items-center justify-center mb-3">
+                    <AlertCircle className="w-6 h-6" strokeWidth={2} />
+                  </div>
+                  <div className="text-sm font-semibold text-notion-text">分析启动失败</div>
+                  <div className="text-xs text-red-600 mt-1 max-w-xs">{error}</div>
+                </div>
+                <div className="flex justify-center gap-2">
+                  <button onClick={() => setStage("config")} className="h-8 px-4 rounded-md text-sm font-medium text-notion-text2 hover:bg-notion-overlay2 transition-colors">
+                    返回重试
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+
+  return mounted ? createPortal(modal, document.body) : null;
+}
+
+/* ──────────────────────────  课本详情弹窗  ────────────────────────── */
+
+function TextbookDetailModal({
+  textbook,
+  onClose,
+  onSave,
+}: {
+  textbook: TextbookItem;
+  onClose: () => void;
+  onSave: (updated: TextbookItem) => void;
+}) {
+  const [mounted, setMounted] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [outline, setOutline] = useState(textbook.outline || "");
+  const [catalog, setCatalog] = useState<CatalogEntry[]>(textbook.catalog || []);
+
+  useState(() => setMounted(true));
+
+  useEffect(() => {
+    setOutline(textbook.outline || "");
+    setCatalog(textbook.catalog || []);
+  }, [textbook]);
+
+  const handleSave = () => {
+    onSave({ ...textbook, outline, catalog });
+    setEditMode(false);
+  };
+
+  const renderCatalog = (entries: CatalogEntry[], depth = 0): React.ReactNode => {
+    if (!entries || entries.length === 0) return null;
+    return (
+      <div className={depth > 0 ? "ml-4 border-l border-notion-border2 pl-3" : ""}>
+        {entries.map((entry, i) => (
+          <div key={i} className="py-1">
+            <div className="flex items-center gap-2 text-sm text-notion-text2">
+              {depth > 0 && <ChevronRight className="w-3 h-3 text-notion-text4" strokeWidth={1.5} />}
+              <span>{entry.title}</span>
+              {entry.page && <span className="text-xs text-notion-text4">P{entry.page}</span>}
+            </div>
+            {entry.children && entry.children.length > 0 && renderCatalog(entry.children, depth + 1)}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const modal = (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.15 }}
+        onClick={onClose}
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4"
+      >
+        <motion.div
+          initial={{ opacity: 0, scale: 0.96, y: 8 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.96, y: 8 }}
+          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-[680px] max-h-[85vh] flex flex-col bg-white rounded-xl shadow-2xl overflow-hidden"
+        >
+          {/* 头部 */}
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-notion-border">
+            <div className="flex items-center gap-2 min-w-0">
+              <BookOpen className="w-4 h-4 text-accent shrink-0" strokeWidth={1.75} />
+              <span className="text-sm font-semibold text-notion-text tracking-tight truncate">
+                {textbook.name}
+              </span>
+              {textbook.status === "analyzing" && (
+                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-accent-light/60 text-accent font-medium shrink-0">
+                  <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                  分析中
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {editMode ? (
+                <>
+                  <button onClick={() => setEditMode(false)} className="h-7 px-2.5 rounded-md text-xs font-medium text-notion-text2 hover:bg-notion-overlay2 transition-colors">
+                    取消
+                  </button>
+                  <button onClick={handleSave} className="h-7 px-3 rounded-md bg-accent text-white text-xs font-medium hover:opacity-90 transition-opacity">
+                    保存
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setEditMode(true)}
+                  disabled={textbook.status === "analyzing"}
+                  className="h-7 px-2.5 rounded-md text-xs font-medium text-notion-text2 hover:bg-notion-overlay2 transition-colors disabled:opacity-40 inline-flex items-center gap-1"
+                >
+                  <Pencil className="w-3 h-3" strokeWidth={1.75} />
+                  编辑
+                </button>
+              )}
+              <button onClick={onClose} className="w-7 h-7 rounded-md flex items-center justify-center text-notion-text2 hover:bg-notion-overlay2 transition-colors">
+                <X className="w-4 h-4" strokeWidth={1.75} />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-5">
+            {/* 基本信息 */}
+            <div className="flex items-center gap-4 mb-5 pb-4 border-b border-notion-border">
+              <div className="w-12 h-12 rounded-xl bg-accent-light/60 text-accent flex items-center justify-center shrink-0">
+                <BookOpen className="w-6 h-6" strokeWidth={1.5} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-notion-text">{textbook.name}</div>
+                <div className="text-xs text-notion-text3 mt-0.5">
+                  {[textbook.subject, textbook.grade, `${textbook.chapters} 章节`, textbook.uploadedAt].filter(Boolean).join(" · ")}
+                </div>
+              </div>
+            </div>
+
+            {textbook.status === "analyzing" ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 text-accent animate-spin mb-3" strokeWidth={1.5} />
+                <div className="text-sm font-medium text-notion-text">AI 正在分析课本…</div>
+                <div className="text-xs text-notion-text3 mt-1">分析完成后将自动显示目录与大纲</div>
+              </div>
+            ) : textbook.status === "error" ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <AlertCircle className="w-8 h-8 text-red-500 mb-3" strokeWidth={1.5} />
+                <div className="text-sm font-medium text-notion-text">分析失败</div>
+                <div className="text-xs text-notion-text3 mt-1">请删除后重新上传</div>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                {/* 目录 */}
+                <div>
+                  <div className="text-xs font-semibold text-notion-text3 uppercase tracking-wider mb-2">目录</div>
+                  {editMode ? (
+                    <textarea
+                      value={JSON.stringify(catalog, null, 2)}
+                      onChange={(e) => {
+                        try {
+                          const parsed = JSON.parse(e.target.value);
+                          setCatalog(parsed);
+                        } catch {
+                          // 忽略 JSON 解析错误
+                        }
+                      }}
+                      rows={10}
+                      placeholder="JSON 格式的目录数据"
+                      className="w-full resize-none px-3 py-2 rounded-md bg-white border border-notion-border2 text-xs font-mono text-notion-text focus:outline-none focus:border-notion-text2 transition-colors"
+                    />
+                  ) : catalog.length > 0 ? (
+                    renderCatalog(catalog)
+                  ) : (
+                    <div className="text-xs text-notion-text4">暂无目录数据</div>
+                  )}
+                </div>
+
+                {/* 大纲 */}
+                <div>
+                  <div className="text-xs font-semibold text-notion-text3 uppercase tracking-wider mb-2">大纲</div>
+                  {editMode ? (
+                    <textarea
+                      value={outline}
+                      onChange={(e) => setOutline(e.target.value)}
+                      rows={12}
+                      placeholder="Markdown 格式的知识大纲"
+                      className="w-full resize-none px-3 py-2 rounded-md bg-white border border-notion-border2 text-xs font-mono text-notion-text focus:outline-none focus:border-notion-text2 transition-colors"
+                    />
+                  ) : outline ? (
+                    <div className="text-sm text-notion-text2 leading-relaxed whitespace-pre-wrap">{outline}</div>
+                  ) : (
+                    <div className="text-xs text-notion-text4">暂无大纲数据</div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+
+  return mounted ? createPortal(modal, document.body) : null;
 }
 
 /* ──────────────────────────  编辑弹窗  ────────────────────────── */
@@ -909,7 +1551,7 @@ function EditModal({
   onSave: (item: TextbookItem | QuestionItem) => void;
 }) {
   const [mounted, setMounted] = useState(false);
-  const [form, setForm] = useState<Record<string, string | number>>({});
+  const [form, setForm] = useState<Record<string, any>>({});
 
   useState(() => {
     setMounted(true);

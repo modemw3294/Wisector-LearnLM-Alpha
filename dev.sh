@@ -4,7 +4,7 @@ set -e
 # 获取脚本所在目录（前端项目根目录）
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 FRONTEND_DIR="$ROOT_DIR"
-BACKEND_DIR="$ROOT_DIR/../Wisector Learn LM/server"
+BACKEND_DIR="$ROOT_DIR/server"
 
 # 颜色输出
 GREEN='\033[0;32m'

@@ -2,57 +2,35 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, ChevronDown, X, Search } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  X,
+  Search,
+  Image as ImageIcon,
+  FileText,
+  Mic,
+} from "lucide-react";
+import type { ModelConfig } from "@/lib/types";
 
 const ICON_BASE = "https://unpkg.com/@lobehub/icons-static-svg@latest/icons";
 
-export interface ModelOption {
-  id: string;
-  name: string;
-  icon: string;
-  /**
-   * reasoning:
-   * - "intensity" 支持推理强度档位（强推理模型）
-   * - "toggle"    仅支持推理开/关（可切换模型）
-   * - "none"      不支持推理
-   */
-  reasoning: "intensity" | "toggle" | "none";
+/** 图标映射：按 id 前缀匹配 */
+function getModelIcon(id: string): string {
+  const lower = id.toLowerCase();
+  if (lower.startsWith("claude")) return "claude-color";
+  if (lower.startsWith("gpt")) return "openai";
+  if (lower.startsWith("gemini") || lower.startsWith("gemma")) return lower.startsWith("gemma") ? "gemma-color" : "gemini-color";
+  if (lower.startsWith("kimi")) return "kimi-color";
+  if (lower.startsWith("qwen")) return "qwen-color";
+  if (lower.startsWith("glm")) return "zhipu-color";
+  if (lower.startsWith("deepseek")) return "deepseek-color";
+  if (lower.startsWith("speech")) return "hailuo-color";
+  return "openai";
 }
 
-export const MODELS: ModelOption[] = [
-  // 支持推理强度：Claude 全部
-  { id: "claude-fable-5", name: "Claude Fable 5", icon: "claude-color", reasoning: "intensity" },
-  { id: "claude-opus-4.8", name: "Claude Opus 4.8", icon: "claude-color", reasoning: "intensity" },
-  { id: "claude-opus-4.7", name: "Claude Opus 4.7", icon: "claude-color", reasoning: "intensity" },
-  { id: "claude-opus-4.6", name: "Claude Opus 4.6", icon: "claude-color", reasoning: "intensity" },
-  { id: "claude-sonnet-4.6", name: "Claude Sonnet 4.6", icon: "claude-color", reasoning: "intensity" },
-  // 支持推理强度：Gemini / Gemma 全部
-  { id: "gemini-3.1-pro", name: "Gemini 3.1 Pro", icon: "gemini-color", reasoning: "intensity" },
-  { id: "gemini-3-flash", name: "Gemini 3 Flash", icon: "gemini-color", reasoning: "intensity" },
-  { id: "gemma-4-31b", name: "Gemma 4 31B", icon: "gemma-color", reasoning: "intensity" },
-  // 支持推理强度：GPT 全部
-  { id: "gpt-5.5", name: "GPT-5.5", icon: "openai", reasoning: "intensity" },
-  { id: "gpt-5.4", name: "GPT-5.4", icon: "openai", reasoning: "intensity" },
-  // 支持推理强度：GLM 5.2
-  { id: "glm-5.2", name: "GLM 5.2", icon: "zhipu-color", reasoning: "intensity" },
-  // 可切换推理：剩下的全部
-  { id: "qwen-3.7-max", name: "Qwen 3.7 Max", icon: "qwen-color", reasoning: "toggle" },
-  { id: "qwen-3.7-plus", name: "Qwen 3.7 Plus", icon: "qwen-color", reasoning: "toggle" },
-  { id: "glm-5.1", name: "GLM 5.1", icon: "zhipu-color", reasoning: "toggle" },
-  { id: "glm-5", name: "GLM 5", icon: "zhipu-color", reasoning: "toggle" },
-  { id: "glm-5v-turbo", name: "GLM 5V Turbo", icon: "zhipu-color", reasoning: "toggle" },
-  { id: "deepseek-v4-pro", name: "Deepseek V4 Pro", icon: "deepseek-color", reasoning: "toggle" },
-  { id: "deepseek-v4-flash", name: "Deepseek V4 Flash", icon: "deepseek-color", reasoning: "toggle" },
-];
-
-interface ModelSelectorProps {
-  /** 已配置（启用）的模型 id 列表 */
-  configuredIds?: string[];
-  selectedId?: string;
-  onSelect?: (id: string) => void;
-}
-
-function ModelIcon({ icon, name }: { icon: string; name: string }) {
+function ModelIcon({ id, name }: { id: string; name: string }) {
+  const icon = getModelIcon(id);
   return (
     <img
       src={`${ICON_BASE}/${icon}.svg`}
@@ -60,29 +38,59 @@ function ModelIcon({ icon, name }: { icon: string; name: string }) {
       width={20}
       height={20}
       className="w-5 h-5 shrink-0"
+      onError={(e) => {
+        // 图标加载失败时隐藏
+        (e.target as HTMLImageElement).style.display = "none";
+      }}
     />
   );
 }
 
+/** 多模态图标 */
+function ModalityTags({ modalities }: { modalities?: string[] }) {
+  if (!modalities || modalities.length === 0) return null;
+  return (
+    <span className="inline-flex items-center gap-0.5 ml-0.5">
+      {modalities.includes("image") && (
+        <ImageIcon className="w-3 h-3 text-notion-text4" strokeWidth={1.5} />
+      )}
+      {modalities.includes("pdf") && (
+        <FileText className="w-3 h-3 text-notion-text4" strokeWidth={1.5} />
+      )}
+      {modalities.includes("audio") && (
+        <Mic className="w-3 h-3 text-notion-text4" strokeWidth={1.5} />
+      )}
+    </span>
+  );
+}
+
+interface ModelSelectorProps {
+  /** 已配置（启用）的模型列表 */
+  models: ModelConfig[];
+  selectedId?: string;
+  onSelect?: (id: string) => void;
+}
+
 export default function ModelSelector({
-  configuredIds,
+  models,
   selectedId,
   onSelect,
 }: ModelSelectorProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [internalSelected, setInternalSelected] = useState<ModelOption>(MODELS[0]);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const selected = selectedId
-    ? MODELS.find((m) => m.id === selectedId) ?? internalSelected
-    : internalSelected;
+  const configuredModels = models.filter((m) => m.enabled);
+  const hasAnyConfigured = configuredModels.length > 0;
 
-  // 关闭弹窗时重置搜索 & 锁定 body 滚动
+  // 当前选中的模型：仅按外部传入的 id 匹配，不默认显示第一个，避免 state 与 UI 不一致
+  const selected = selectedId
+    ? configuredModels.find((m) => m.id === selectedId)
+    : undefined;
+
   useEffect(() => {
     if (open) {
       setQuery("");
-      // 自动聚焦搜索框
       setTimeout(() => searchInputRef.current?.focus(), 50);
       document.body.style.overflow = "hidden";
     } else {
@@ -93,7 +101,6 @@ export default function ModelSelector({
     };
   }, [open]);
 
-  // ESC 关闭
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
@@ -103,41 +110,51 @@ export default function ModelSelector({
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
-  const isConfigured = (id: string) => {
-    if (!configuredIds) return true;
-    return configuredIds.includes(id);
-  };
-
-  const handleSelect = (model: ModelOption) => {
-    if (!isConfigured(model.id)) return;
-    setInternalSelected(model);
+  const handleSelect = (model: ModelConfig) => {
     onSelect?.(model.id);
     setOpen(false);
   };
 
-  const filteredModels = MODELS.filter((m) =>
-    m.name.toLowerCase().includes(query.trim().toLowerCase())
+  const filteredModels = configuredModels.filter((m) =>
+    (m.displayName || m.id).toLowerCase().includes(query.trim().toLowerCase())
   );
 
   return (
     <>
       {/* 触发按钮 */}
       <motion.button
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
-        onClick={() => setOpen(true)}
-        className="flex items-center gap-1.5 px-2.5 h-7 rounded-full hover:bg-notion-overlay2 transition-colors"
+        whileHover={hasAnyConfigured ? { scale: 1.02 } : {}}
+        whileTap={hasAnyConfigured ? { scale: 0.98 } : {}}
+        onClick={() => hasAnyConfigured && setOpen(true)}
+        className={`flex items-center gap-1.5 px-2.5 h-7 rounded-full transition-colors ${
+          hasAnyConfigured
+            ? "hover:bg-notion-overlay2"
+            : "cursor-not-allowed opacity-50"
+        }`}
+        title={hasAnyConfigured ? undefined : "请先在设置面板中配置模型"}
       >
-        <ModelIcon icon={selected.icon} name={selected.name} />
-        <span className="text-sm font-medium text-notion-text tracking-tight whitespace-nowrap">
-          {selected.name}
-        </span>
-        <ChevronDown className="w-3.5 h-3.5 text-notion-text2" strokeWidth={1.5} />
+        {selected ? (
+          <>
+            <ModelIcon id={selected.id} name={selected.displayName || selected.id} />
+            <span className="text-sm font-medium text-notion-text tracking-tight whitespace-nowrap">
+              {selected.displayName || selected.id}
+            </span>
+            <ChevronDown className="w-3.5 h-3.5 text-notion-text2" strokeWidth={1.5} />
+          </>
+        ) : hasAnyConfigured ? (
+          <span className="text-sm text-notion-text3 tracking-tight whitespace-nowrap">
+            选择模型
+          </span>
+        ) : (
+          <span className="text-sm text-notion-text3 tracking-tight whitespace-nowrap">
+            无可用模型
+          </span>
+        )}
       </motion.button>
 
       {/* 居中弹窗 */}
       <AnimatePresence>
-        {open && (
+        {open && hasAnyConfigured && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -177,34 +194,29 @@ export default function ModelSelector({
               <div className="flex-1 overflow-y-auto p-2">
                 {filteredModels.length === 0 ? (
                   <div className="px-3 py-10 text-center text-sm text-notion-text3">
-                    没有匹配的模型
+                    {configuredModels.length === 0 ? "暂无可用模型" : "没有匹配的模型"}
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
                     {filteredModels.map((model) => {
-                      const configured = isConfigured(model.id);
-                      const isSelected = selected.id === model.id;
+                      const isSelected = selected?.id === model.id;
                       return (
                         <button
                           key={model.id}
                           onClick={() => handleSelect(model)}
-                          disabled={!configured}
                           className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-left transition-colors border ${
                             isSelected
-                              ? "bg-blue-50 border-blue-200"
-                              : configured
-                              ? "hover:bg-notion-overlay2 border-transparent"
-                              : "cursor-not-allowed border-transparent opacity-50"
+                              ? "bg-accent-light/50 border-accent-ring/60"
+                              : "hover:bg-notion-overlay2 border-transparent"
                           }`}
                         >
-                          <ModelIcon icon={model.icon} name={model.name} />
+                          <ModelIcon id={model.id} name={model.displayName || model.id} />
                           <div className="flex-1 min-w-0">
-                            <div
-                              className={`text-sm font-medium tracking-tight truncate ${
-                                configured ? "text-notion-text" : "text-notion-text4"
-                              }`}
-                            >
-                              {model.name}
+                            <div className="flex items-center gap-1">
+                              <span className="text-sm font-medium tracking-tight truncate text-notion-text">
+                                {model.displayName || model.id}
+                              </span>
+                              <ModalityTags modalities={model.inputModalities} />
                             </div>
                             <div className="text-[11px] text-notion-text4 mt-0.5">
                               {model.reasoning === "intensity"
@@ -212,12 +224,11 @@ export default function ModelSelector({
                                 : model.reasoning === "toggle"
                                 ? "可切换推理"
                                 : "无推理"}
-                              {!configured && " · 未配置"}
                             </div>
                           </div>
                           {isSelected && (
                             <Check
-                              className="w-4 h-4 text-blue-600 shrink-0"
+                              className="w-4 h-4 text-accent shrink-0"
                               strokeWidth={2.5}
                             />
                           )}

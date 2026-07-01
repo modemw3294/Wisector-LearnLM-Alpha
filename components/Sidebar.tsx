@@ -9,28 +9,26 @@ import {
   LineChart,
   Settings,
   Notebook,
-  Trash2,
-  FileText,
   X,
   Database,
+  PanelLeftClose,
+  PanelLeft,
+  Loader2,
 } from "lucide-react";
 import { useState } from "react";
 import Logo from "./Logo";
+import { useChatStore, clearChat, loadConversation, deleteConversation } from "@/lib/chatStore";
+import TaskIndicator from "./TaskIndicator";
+import { Trash2, MessageSquare } from "lucide-react";
 
 const navItems = [
   { id: "new", label: "新对话", icon: Plus },
   { id: "video", label: "视频", icon: Video },
   { id: "explain", label: "讲解", icon: BookOpen },
   { id: "quiz", label: "测验", icon: ClipboardCheck },
-  { id: "track", label: "学习轨迹", icon: LineChart },
+  { id: "trace", label: "学习轨迹", icon: LineChart },
   { id: "notes", label: "笔记", icon: Notebook },
 ];
-
-interface Note {
-  id: string;
-  title: string;
-  updatedAt: number;
-}
 
 interface SidebarProps {
   onOpenSettings: () => void;
@@ -40,6 +38,10 @@ interface SidebarProps {
   bottomSlot?: React.ReactNode;
   /** 外部控制高亮的导航项 */
   activeTab?: string;
+  /** PC 端折叠状态 */
+  collapsed?: boolean;
+  /** PC 端折叠切换回调 */
+  onToggleCollapse?: () => void;
 }
 
 export default function Sidebar({
@@ -48,18 +50,20 @@ export default function Sidebar({
   onMobileClose,
   bottomSlot,
   activeTab: activeTabProp,
+  collapsed = false,
+  onToggleCollapse,
 }: SidebarProps) {
   const [internalTab, setInternalTab] = useState("new");
   const activeTab = activeTabProp ?? internalTab;
-  const [notesPanelOpen, setNotesPanelOpen] = useState(false);
-  const [notes, setNotes] = useState<Note[]>([
-    { id: "demo-1", title: "欢迎使用笔记", updatedAt: Date.now() - 3600_000 },
-  ]);
-  const [newNoteTitle, setNewNoteTitle] = useState("");
+  const chatState = useChatStore();
+  const chatRunning = chatState.isLoading;
+  const conversations = chatState.conversations || [];
+  const currentConvId = chatState.currentConversationId;
 
   const handleNavClick = (id: string) => {
-    // 有独立页面的导航项：跳转
     if (id === "new") {
+      // 清空对话再跳转
+      clearChat();
       window.location.href = "/";
       return;
     }
@@ -67,63 +71,68 @@ export default function Sidebar({
       window.location.href = "/video";
       return;
     }
-    if (id === "notes") {
-      setNotesPanelOpen((v) => !v);
-      setInternalTab("notes");
-    } else {
-      setNotesPanelOpen(false);
-      setInternalTab(id);
+    if (id === "quiz") {
+      window.location.href = "/quiz";
+      return;
     }
-    // 移动端：点完关闭抽屉
-    if (id !== "notes" && onMobileClose) {
+    if (id === "notes") {
+      window.location.href = "/notes";
+      return;
+    }
+    if (id === "trace") {
+      window.location.href = "/trace";
+      return;
+    }
+    setInternalTab(id);
+    if (onMobileClose) {
       onMobileClose();
     }
   };
-
-  const addNote = () => {
-    const title = newNoteTitle.trim() || `未命名笔记 ${notes.length + 1}`;
-    const note: Note = {
-      id: `note-${Date.now()}`,
-      title,
-      updatedAt: Date.now(),
-    };
-    setNotes((prev) => [note, ...prev]);
-    setNewNoteTitle("");
-  };
-
-  const removeNote = (id: string) => {
-    setNotes((prev) => prev.filter((n) => n.id !== id));
-  };
-
-  const isNotesActive = activeTab === "notes";
-  const isNotesPanelOpen = notesPanelOpen && isNotesActive;
 
   // 侧边栏主体内容
   const sidebarContent = (
     <>
       {/* Logo 区域 */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="flex items-center px-4 py-3 gap-2"
+      <div
+        className={`flex items-center py-3 gap-2 ${
+          collapsed ? "flex-col px-1" : "px-4"
+        }`}
       >
-        <Logo />
-        <span className="text-sm text-notion-text tracking-tight font-medium flex-1">
-          Wisector LearnLM
-        </span>
-        {/* 移动端关闭按钮 */}
-        <button
-          onClick={onMobileClose}
-          className="md:hidden w-7 h-7 rounded-md flex items-center justify-center text-notion-text2 hover:bg-notion-overlay2 transition-colors"
-          aria-label="关闭侧边栏"
-        >
-          <X className="w-4 h-4" strokeWidth={1.75} />
-        </button>
-      </motion.div>
+        <div className={`flex items-center gap-2 ${collapsed ? "flex-col" : "flex-1 w-full"}`}>
+          <Logo />
+          {!collapsed && (
+            <span className="text-sm text-notion-text tracking-tight font-medium flex-1">
+              Wisector LearnLM
+            </span>
+          )}
+          {/* 折叠切换按钮 - 紧挨 Wisector LearnLM 字样右边 */}
+          {onToggleCollapse && (
+            <button
+              onClick={onToggleCollapse}
+              className="hidden md:flex w-7 h-7 rounded-md items-center justify-center text-notion-text3 hover:bg-notion-overlay2 transition-colors shrink-0"
+              title={collapsed ? "展开侧边栏" : "折叠侧边栏"}
+              aria-label={collapsed ? "展开侧边栏" : "折叠侧边栏"}
+            >
+              {collapsed ? (
+                <PanelLeft className="w-4 h-4" strokeWidth={1.75} />
+              ) : (
+                <PanelLeftClose className="w-4 h-4" strokeWidth={1.75} />
+              )}
+            </button>
+          )}
+          {/* 移动端关闭按钮 */}
+          <button
+            onClick={onMobileClose}
+            className="md:hidden w-7 h-7 rounded-md flex items-center justify-center text-notion-text2 hover:bg-notion-overlay2 transition-colors"
+            aria-label="关闭侧边栏"
+          >
+            <X className="w-4 h-4" strokeWidth={1.75} />
+          </button>
+        </div>
+      </div>
 
       {/* 垂直导航菜单 */}
-      <nav className="flex flex-col gap-0.5 px-2 py-2">
+      <nav className={`flex flex-col gap-0.5 py-2 ${collapsed ? "px-1" : "px-2"}`}>
         {navItems.map((item, index) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
@@ -139,7 +148,8 @@ export default function Sidebar({
                 isActive
                   ? "text-notion-text"
                   : "text-notion-text2 hover:bg-notion-overlay2"
-              }`}
+              } ${collapsed ? "justify-center px-0" : ""}`}
+              title={collapsed ? item.label : undefined}
             >
               {isActive && (
                 <motion.div
@@ -149,95 +159,82 @@ export default function Sidebar({
                 />
               )}
               <Icon className="w-[18px] h-[18px] shrink-0" strokeWidth={1.75} />
-              <span className="text-sm font-medium tracking-tight">
-                {item.label}
-              </span>
+              {!collapsed && (
+                <span className="text-sm font-medium tracking-tight flex-1 text-left">
+                  {item.label}
+                </span>
+              )}
+              {/* 后台对话运行指示器 */}
+              {item.id === "new" && chatRunning && (
+                <Loader2 className="w-3 h-3 text-accent animate-spin shrink-0" />
+              )}
             </motion.button>
           );
         })}
       </nav>
 
-      {/* 笔记列表面板 */}
-      <AnimatePresence initial={false}>
-        {isNotesPanelOpen && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
-            <div className="px-2 pb-2 space-y-2">
-              <div className="flex items-center gap-1.5 px-2">
-                <input
-                  value={newNoteTitle}
-                  onChange={(e) => setNewNoteTitle(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") addNote();
-                  }}
-                  placeholder="新建笔记…"
-                  className="flex-1 h-7 px-2 rounded-md bg-white border border-notion-border2 text-xs text-notion-text placeholder:text-notion-text4 focus:outline-none focus:border-notion-text2 transition-colors"
-                />
-                <button
-                  onClick={addNote}
-                  className="w-7 h-7 rounded-md flex items-center justify-center bg-notion-text text-white hover:opacity-90 transition-opacity"
-                  title="新建笔记"
-                >
-                  <Plus className="w-3.5 h-3.5" strokeWidth={2} />
-                </button>
-              </div>
-
-              <div className="space-y-0.5 max-h-[40vh] overflow-y-auto">
-                {notes.length === 0 ? (
-                  <div className="px-2 py-3 text-xs text-notion-text4 text-center">
-                    暂无笔记
-                  </div>
-                ) : (
-                  notes.map((note) => (
-                    <div
-                      key={note.id}
-                      className="group relative flex items-center gap-2 px-2 h-7 rounded-md hover:bg-notion-overlay2 transition-colors"
-                    >
-                      <FileText
-                        className="w-3.5 h-3.5 shrink-0 text-notion-text3"
-                        strokeWidth={1.5}
-                      />
-                      <span className="flex-1 text-xs text-notion-text2 truncate">
-                        {note.title}
-                      </span>
-                      <button
-                        onClick={() => removeNote(note.id)}
-                        className="opacity-0 group-hover:opacity-100 w-5 h-5 rounded flex items-center justify-center text-notion-text3 hover:text-red-600 transition-all"
-                        title="删除"
-                      >
-                        <Trash2 className="w-3 h-3" strokeWidth={1.5} />
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
+      {/* 对话历史列表 */}
+      {!collapsed && conversations.length > 0 && (
+        <div className="px-3 pt-2 pb-1">
+          <span className="text-[11px] font-medium text-notion-text4 px-1">最近对话</span>
+        </div>
+      )}
+      {!collapsed && conversations.length > 0 && (
+        <div className="flex-1 overflow-y-auto px-2 space-y-0.5 min-h-0">
+          {conversations.map((conv) => (
+            <div
+              key={conv.id}
+              className={`group relative h-8 px-2.5 rounded-md flex items-center gap-2 cursor-pointer transition-colors ${
+                currentConvId === conv.id
+                  ? "bg-notion-overlay text-notion-text"
+                  : "text-notion-text2 hover:bg-notion-overlay2"
+              }`}
+              onClick={() => {
+                loadConversation(conv.id);
+                window.location.href = "/";
+              }}
+            >
+              <MessageSquare className="w-[15px] h-[15px] shrink-0 text-notion-text4" strokeWidth={1.5} />
+              <span className="text-xs flex-1 truncate">{conv.title}</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  deleteConversation(conv.id);
+                }}
+                className="w-5 h-5 rounded flex items-center justify-center text-notion-text4 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                title="删除对话"
+              >
+                <Trash2 className="w-3 h-3" strokeWidth={1.5} />
+              </button>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          ))}
+        </div>
+      )}
 
-      <div className="flex-1" />
+      {collapsed && conversations.length === 0 && <div className="flex-1" />}
+      {!collapsed && conversations.length === 0 && <div className="flex-1" />}
 
-      {/* 自定义底部内容（如视频目录） */}
+      {/* 自定义底部内容 */}
       {bottomSlot}
 
-      {/* 底部：数据管理 + 设置 */}
-      <div className="p-2 border-t border-notion-border space-y-0.5">
+      {/* 底部按钮 */}
+      <div className={`p-2 border-t border-notion-border space-y-0.5 ${collapsed ? "flex flex-col items-center" : ""}`}>
+        {/* 任务指示器 */}
+        <TaskIndicator collapsed={collapsed} />
+
         <motion.a
           href="/data"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.35, duration: 0.25 }}
           whileTap={{ scale: 0.98 }}
-          className="w-full h-8 px-2.5 rounded-md flex items-center gap-2.5 text-sm font-medium tracking-tight text-notion-text2 hover:bg-notion-overlay2 transition-colors"
+          className={`w-full h-8 px-2.5 rounded-md flex items-center gap-2.5 text-sm font-medium tracking-tight text-notion-text2 hover:bg-notion-overlay2 transition-colors ${
+            collapsed ? "justify-center px-0" : ""
+          }`}
+          title={collapsed ? "数据管理" : undefined}
         >
           <Database className="w-[18px] h-[18px] shrink-0" strokeWidth={1.75} />
-          <span>数据管理</span>
+          {!collapsed && <span>数据管理</span>}
         </motion.a>
 
         <motion.button
@@ -246,10 +243,13 @@ export default function Sidebar({
           transition={{ delay: 0.4, duration: 0.25 }}
           whileTap={{ scale: 0.98 }}
           onClick={onOpenSettings}
-          className="w-full h-8 px-2.5 rounded-md flex items-center gap-2.5 text-sm font-medium tracking-tight text-notion-text2 hover:bg-notion-overlay2 transition-colors"
+          className={`w-full h-8 px-2.5 rounded-md flex items-center gap-2.5 text-sm font-medium tracking-tight text-notion-text2 hover:bg-notion-overlay2 transition-colors ${
+            collapsed ? "justify-center px-0" : ""
+          }`}
+          title={collapsed ? "设置" : undefined}
         >
           <Settings className="w-[18px] h-[18px] shrink-0" strokeWidth={1.75} />
-          <span>设置</span>
+          {!collapsed && <span>设置</span>}
         </motion.button>
       </div>
     </>
@@ -258,7 +258,11 @@ export default function Sidebar({
   return (
     <>
       {/* 桌面端：固定侧边栏 */}
-      <aside className="hidden md:flex w-[270px] h-screen bg-notion-sidebar flex-col border-r border-notion-border shrink-0">
+      <aside
+        className={`hidden md:flex h-screen bg-notion-sidebar flex-col border-r border-notion-border shrink-0 transition-all duration-200 ${
+          collapsed ? "w-[56px]" : "w-[270px]"
+        }`}
+      >
         {sidebarContent}
       </aside>
 
@@ -266,7 +270,6 @@ export default function Sidebar({
       <AnimatePresence>
         {mobileOpen && (
           <>
-            {/* 遮罩 */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -275,7 +278,6 @@ export default function Sidebar({
               onClick={onMobileClose}
               className="md:hidden fixed inset-0 bg-black/40 z-40"
             />
-            {/* 抽屉 */}
             <motion.aside
               initial={{ x: "-100%" }}
               animate={{ x: 0 }}
@@ -290,15 +292,4 @@ export default function Sidebar({
       </AnimatePresence>
     </>
   );
-}
-
-function formatTime(ts: number): string {
-  const diff = Date.now() - ts;
-  const min = Math.floor(diff / 60_000);
-  if (min < 1) return "刚刚";
-  if (min < 60) return `${min} 分钟前`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr} 小时前`;
-  const day = Math.floor(hr / 24);
-  return `${day} 天前`;
 }

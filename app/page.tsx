@@ -8,6 +8,7 @@ import SettingsModal from "@/components/SettingsModal";
 export default function Home() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   return (
     <main className="flex h-screen bg-notion-bg overflow-hidden">
@@ -16,6 +17,9 @@ export default function Home() {
         onOpenSettings={() => setIsSettingsOpen(true)}
         mobileOpen={mobileSidebarOpen}
         onMobileClose={() => setMobileSidebarOpen(false)}
+        activeTab="new"
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
       />
 
       <ChatArea

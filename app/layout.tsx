@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import "katex/dist/katex.min.css";
+import "highlight.js/styles/github.css";
 import "./globals.css";
+import ClientProvider from "@/components/ClientProvider";
 
 export const metadata: Metadata = {
   title: "Wisector LearnLM",
@@ -14,7 +16,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh-CN">
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        <ClientProvider>{children}</ClientProvider>
+      </body>
     </html>
   );
 }

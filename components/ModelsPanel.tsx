@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Plus, Pencil, Trash2, Check, AlertCircle, MessageSquare, Image as ImageIcon, Mic } from "lucide-react";
+import { X, Plus, Pencil, Trash2, Check, AlertCircle, MessageSquare, Image as ImageIcon, Mic, Brain } from "lucide-react";
 import { api } from "@/lib/api";
 import {
   ModelConfig,
@@ -10,6 +10,7 @@ import {
   RequestFormat,
   InputModality,
   Currency,
+  ReasoningMode,
   PDF_CAPABLE_FORMATS,
 } from "@/lib/types";
 
@@ -29,11 +30,19 @@ const MODALITY_OPTIONS: { value: InputModality; label: string }[] = [
 
 const CURRENCY_OPTIONS: Currency[] = ["CNY", "USD"];
 
+/** 各请求格式的官方默认 API 端点（留空时后端自动使用） */
+const DEFAULT_ENDPOINT_BY_FORMAT: Record<RequestFormat, string> = {
+  "openai-completions": "https://api.openai.com/v1",
+  "openai-responses": "https://api.openai.com/v1",
+  "anthropic-messages": "https://api.anthropic.com/v1",
+  "gemini": "https://generativelanguage.googleapis.com/v1beta",
+};
+
 const DEFAULT_FORM: ModelConfigInput = {
   id: "",
   displayName: "",
   format: "openai-completions",
-  endpoint: "https://api.openai.com/v1",
+  endpoint: "",
   apiKey: "",
   modelName: "",
   contextWindow: 128000,
@@ -43,6 +52,7 @@ const DEFAULT_FORM: ModelConfigInput = {
   pricing: { input: 0, output: 0, currency: "CNY" },
   headers: {},
   enabled: true,
+  reasoning: "none",
 };
 
 /* ──────────────────────  预设  ────────────────────── */
@@ -58,6 +68,7 @@ interface Preset {
   contextWindow: number;
   inputModalities: InputModality[];
   maxOutput: number;
+  reasoning: ReasoningMode;
 }
 
 const CHAT_PRESETS: Preset[] = [
@@ -70,6 +81,7 @@ const CHAT_PRESETS: Preset[] = [
     contextWindow: 200000,
     inputModalities: ["text", "image", "pdf"],
     maxOutput: 8192,
+    reasoning: "intensity",
   },
   {
     id: "claude-opus-4.8",
@@ -80,6 +92,7 @@ const CHAT_PRESETS: Preset[] = [
     contextWindow: 200000,
     inputModalities: ["text", "image", "pdf"],
     maxOutput: 8192,
+    reasoning: "intensity",
   },
   {
     id: "gpt-5.5",
@@ -90,6 +103,18 @@ const CHAT_PRESETS: Preset[] = [
     contextWindow: 128000,
     inputModalities: ["text", "image"],
     maxOutput: 16384,
+    reasoning: "intensity",
+  },
+  {
+    id: "gemini-3.5-flash",
+    displayName: "Gemini 3.5 Flash",
+    format: "gemini",
+    endpoint: "https://generativelanguage.googleapis.com/v1beta",
+    modelName: "gemini-3.5-flash",
+    contextWindow: 1000000,
+    inputModalities: ["text", "image", "pdf", "audio"],
+    maxOutput: 8192,
+    reasoning: "intensity",
   },
   {
     id: "gemini-3.1-pro",
@@ -100,6 +125,29 @@ const CHAT_PRESETS: Preset[] = [
     contextWindow: 2000000,
     inputModalities: ["text", "image", "pdf", "audio"],
     maxOutput: 8192,
+    reasoning: "intensity",
+  },
+  {
+    id: "kimi-k2.7-code",
+    displayName: "Kimi K2.7 Code",
+    format: "openai-completions",
+    endpoint: "https://api.moonshot.cn/v1",
+    modelName: "kimi-k2.7-code",
+    contextWindow: 256000,
+    inputModalities: ["text"],
+    maxOutput: 8192,
+    reasoning: "toggle",
+  },
+  {
+    id: "kimi-k2.6",
+    displayName: "Kimi K2.6",
+    format: "openai-completions",
+    endpoint: "https://api.moonshot.cn/v1",
+    modelName: "kimi-k2.6",
+    contextWindow: 256000,
+    inputModalities: ["text"],
+    maxOutput: 8192,
+    reasoning: "toggle",
   },
   {
     id: "deepseek-v4-pro",
@@ -110,6 +158,7 @@ const CHAT_PRESETS: Preset[] = [
     contextWindow: 128000,
     inputModalities: ["text"],
     maxOutput: 8192,
+    reasoning: "toggle",
   },
   {
     id: "qwen-3.7-max",
@@ -120,6 +169,7 @@ const CHAT_PRESETS: Preset[] = [
     contextWindow: 128000,
     inputModalities: ["text", "image"],
     maxOutput: 8192,
+    reasoning: "toggle",
   },
 ];
 
@@ -133,6 +183,7 @@ const IMAGE_PRESETS: Preset[] = [
     contextWindow: 32000,
     inputModalities: ["text"],
     maxOutput: 4096,
+    reasoning: "none",
   },
   {
     id: "gemini-3.1-flash-image",
@@ -143,6 +194,7 @@ const IMAGE_PRESETS: Preset[] = [
     contextWindow: 32000,
     inputModalities: ["text"],
     maxOutput: 4096,
+    reasoning: "none",
   },
   {
     id: "seedream-4.0",
@@ -153,6 +205,7 @@ const IMAGE_PRESETS: Preset[] = [
     contextWindow: 32000,
     inputModalities: ["text"],
     maxOutput: 4096,
+    reasoning: "none",
   },
 ];
 
@@ -166,6 +219,7 @@ const TTS_PRESETS: Preset[] = [
     contextWindow: 16000,
     inputModalities: ["text"],
     maxOutput: 4096,
+    reasoning: "none",
   },
   {
     id: "gemini-3.1-flash-tts-preview",
@@ -176,6 +230,7 @@ const TTS_PRESETS: Preset[] = [
     contextWindow: 32000,
     inputModalities: ["text"],
     maxOutput: 4096,
+    reasoning: "none",
   },
 ];
 
@@ -230,6 +285,8 @@ export default function ModelsPanel({ list, loading, error, onRefresh }: ModelsP
   const [headersError, setHeadersError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  // 标记刚应用了预设，避免 useEffect 把表单重置回 DEFAULT_FORM
+  const presetJustApplied = useRef(false);
 
   // 按分类筛选模型列表
   const categoryList = list.filter((m) => {
@@ -240,6 +297,11 @@ export default function ModelsPanel({ list, loading, error, onRefresh }: ModelsP
   });
 
   useEffect(() => {
+    // 如果刚应用了预设，跳过这次重置（applyPreset 已设置好 form）
+    if (presetJustApplied.current) {
+      presetJustApplied.current = false;
+      return;
+    }
     if (creating) {
       setForm(DEFAULT_FORM);
       setHeadersText("{}");
@@ -271,6 +333,8 @@ export default function ModelsPanel({ list, loading, error, onRefresh }: ModelsP
 
   // 一键填入预设
   const applyPreset = (preset: Preset) => {
+    // 标记：useEffect 不要重置表单
+    presetJustApplied.current = true;
     setForm({
       ...DEFAULT_FORM,
       id: preset.id,
@@ -281,6 +345,7 @@ export default function ModelsPanel({ list, loading, error, onRefresh }: ModelsP
       contextWindow: preset.contextWindow,
       inputModalities: preset.inputModalities,
       maxOutput: preset.maxOutput,
+      reasoning: preset.reasoning,
     });
     setHeadersText("{}");
     setHeadersError(null);
@@ -315,13 +380,13 @@ export default function ModelsPanel({ list, loading, error, onRefresh }: ModelsP
         headers: parsedHeaders,
         id: form.id.trim(),
         displayName: form.displayName.trim(),
-        endpoint: form.endpoint.trim(),
+        endpoint: form.endpoint.trim(), // 留空时后端使用官方默认 API
         apiKey: form.apiKey,
         modelName: form.modelName?.trim() || undefined,
       };
 
-      if (!payload.id || !payload.displayName || !payload.endpoint || !payload.apiKey) {
-        setFormError("请填写所有必填项（请求 ID、显示名称、API 端点、API Key）");
+      if (!payload.id || !payload.displayName || !payload.apiKey) {
+        setFormError("请填写所有必填项（请求 ID、显示名称、API Key）");
         setSaving(false);
         return;
       }
@@ -424,7 +489,7 @@ export default function ModelsPanel({ list, loading, error, onRefresh }: ModelsP
                     onClick={() => applyPreset(preset)}
                     className="w-full flex items-center gap-3 p-3 rounded-md border border-notion-border2 bg-white hover:border-notion-text3 hover:bg-notion-overlay2 transition-colors text-left"
                   >
-                    <div className="w-9 h-9 rounded-md bg-blue-50 text-blue-700 flex items-center justify-center shrink-0">
+                    <div className="w-9 h-9 rounded-md bg-accent-light/60 text-accent flex items-center justify-center shrink-0">
                       <Plus className="w-4 h-4" strokeWidth={1.75} />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -435,7 +500,7 @@ export default function ModelsPanel({ list, loading, error, onRefresh }: ModelsP
                         <code>{preset.id}</code> · {preset.format}
                       </div>
                     </div>
-                    <span className="text-xs text-blue-600 font-medium shrink-0">填入</span>
+                    <span className="text-xs text-accent font-medium shrink-0">填入</span>
                   </button>
                 ))}
               </div>
@@ -467,13 +532,18 @@ export default function ModelsPanel({ list, loading, error, onRefresh }: ModelsP
                               </span>
                             )}
                             {pdfCapable && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700">
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-light/60 text-accent">
                                 PDF
                               </span>
                             )}
                           </div>
                           <div className="text-xs text-notion-text3 mt-0.5 truncate">
                             <code>{m.id}</code> · {m.format} · {m.contextWindow.toLocaleString()} ctx
+                            {m.reasoning === "intensity"
+                              ? " · 推理强度"
+                              : m.reasoning === "toggle"
+                              ? " · 推理开关"
+                              : ""}
                           </div>
                         </div>
                         <button
@@ -511,7 +581,7 @@ export default function ModelsPanel({ list, loading, error, onRefresh }: ModelsP
                               onClick={() => applyPreset(preset)}
                               className="w-full flex items-center gap-3 p-2.5 rounded-md border border-dashed border-notion-border2 bg-white hover:border-notion-text3 hover:bg-notion-overlay2 transition-colors text-left"
                             >
-                              <div className="w-8 h-8 rounded-md bg-blue-50 text-blue-700 flex items-center justify-center shrink-0">
+                              <div className="w-8 h-8 rounded-md bg-accent-light/60 text-accent flex items-center justify-center shrink-0">
                                 <Plus className="w-3.5 h-3.5" strokeWidth={1.75} />
                               </div>
                               <div className="flex-1 min-w-0">
@@ -522,7 +592,7 @@ export default function ModelsPanel({ list, loading, error, onRefresh }: ModelsP
                                   <code>{preset.id}</code>
                                 </div>
                               </div>
-                              <span className="text-xs text-blue-600 font-medium shrink-0">填入</span>
+                              <span className="text-xs text-accent font-medium shrink-0">填入</span>
                             </button>
                           ))}
                         </div>
@@ -602,12 +672,12 @@ export default function ModelsPanel({ list, loading, error, onRefresh }: ModelsP
             </Field>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="API 端点">
+              <Field label="API 端点" hint={form.endpoint ? undefined : `留空使用 ${DEFAULT_ENDPOINT_BY_FORMAT[form.format]}`}>
                 <input
                   className={inputCls}
                   value={form.endpoint}
                   onChange={(e) => setForm({ ...form, endpoint: e.target.value })}
-                  placeholder="https://api.openai.com/v1"
+                  placeholder={DEFAULT_ENDPOINT_BY_FORMAT[form.format]}
                 />
               </Field>
               <Field label="API Key">
@@ -666,6 +736,34 @@ export default function ModelsPanel({ list, loading, error, onRefresh }: ModelsP
                       {active && <Check className="w-3 h-3 inline mr-1" strokeWidth={2.5} />}
                       {o.label}
                       {o.value === "pdf" && !pdfSupported && "（当前格式不支持）"}
+                    </button>
+                  );
+                })}
+              </div>
+            </Field>
+
+            <Field label="推理强度" hint="控制对话时是否可用推理">
+              <div className="flex flex-wrap gap-2">
+                {([
+                  { value: "intensity", label: "推理强度档位", desc: "支持 5 档强度调节" },
+                  { value: "toggle", label: "推理开关", desc: "仅开/关推理" },
+                  { value: "none", label: "不支持", desc: "关闭推理入口" },
+                ] as { value: ReasoningMode; label: string; desc: string }[]).map((o) => {
+                  const active = form.reasoning === o.value;
+                  return (
+                    <button
+                      key={o.value}
+                      type="button"
+                      onClick={() => setForm({ ...form, reasoning: o.value })}
+                      title={o.desc}
+                      className={`h-8 px-3 rounded-md text-xs font-medium transition-colors border inline-flex items-center gap-1.5 ${
+                        active
+                          ? "bg-notion-text text-white border-notion-text"
+                          : "bg-white text-notion-text2 border-notion-border2 hover:bg-notion-overlay2"
+                      }`}
+                    >
+                      <Brain className="w-3 h-3" strokeWidth={2} />
+                      {o.label}
                     </button>
                   );
                 })}

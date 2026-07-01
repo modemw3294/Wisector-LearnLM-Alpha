@@ -3,7 +3,8 @@
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { BookOpen, Check, ChevronDown, Search, X, Plus } from "lucide-react";
+import { BookOpen, Check, ChevronDown, Search, X, Plus, Loader2, AlertCircle } from "lucide-react";
+import { api, type TextbookItem } from "@/lib/api";
 
 export interface Textbook {
   id: string;
@@ -12,14 +13,8 @@ export interface Textbook {
   grade?: string;
 }
 
-// 占位数据：实际从数据管理页 / API 获取
-export const TEXTBOOKS: Textbook[] = [
-  { id: "math-7", name: "人教版 · 七年级数学（上）", subject: "数学", grade: "七年级" },
-  { id: "math-8", name: "人教版 · 八年级数学（上）", subject: "数学", grade: "八年级" },
-  { id: "physics-9", name: "教科版 · 九年级物理", subject: "物理", grade: "九年级" },
-  { id: "eng-7", name: "外研版 · 七年级英语", subject: "英语", grade: "七年级" },
-  { id: "cs-hs1", name: "浙教版 · 高中信息技术（必修一）", subject: "信息技术", grade: "高一" },
-];
+/** 兼容旧导出：现在始终为空数组，组件内部从 API 加载 */
+export const TEXTBOOKS: Textbook[] = [];
 
 interface TextbookSelectorProps {
   selectedId?: string;
@@ -33,16 +28,37 @@ export default function TextbookSelector({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [mounted, setMounted] = useState(false);
+  const [items, setItems] = useState<TextbookItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  const hasSelection = !!selectedId;
-  const selected = hasSelection
-    ? TEXTBOOKS.find((t) => t.id === selectedId)
-    : undefined;
+  // 打开弹窗时从 API 加载课本列表
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    api.listTextbooks()
+      .then((data) => {
+        if (cancelled) return;
+        setItems(data || []);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   useEffect(() => {
     if (open) {
@@ -66,7 +82,13 @@ export default function TextbookSelector({
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
-  const filtered = TEXTBOOKS.filter((t) =>
+  const hasSelection = !!selectedId;
+  const selected = hasSelection
+    ? items.find((t) => t.id === selectedId) ||
+      TEXTBOOKS.find((t) => t.id === selectedId)
+    : undefined;
+
+  const filtered = items.filter((t) =>
     t.name.toLowerCase().includes(query.trim().toLowerCase())
   );
 
@@ -108,9 +130,19 @@ export default function TextbookSelector({
             </div>
 
             <div className="flex-1 overflow-y-auto p-2">
-              {filtered.length === 0 ? (
+              {loading ? (
                 <div className="px-3 py-10 text-center text-sm text-notion-text3">
-                  没有匹配的课本
+                  <Loader2 className="w-5 h-5 mx-auto animate-spin text-accent" strokeWidth={2} />
+                  <div className="mt-2">加载课本中…</div>
+                </div>
+              ) : error ? (
+                <div className="px-3 py-10 text-center text-sm text-red-600">
+                  <AlertCircle className="w-5 h-5 mx-auto" strokeWidth={2} />
+                  <div className="mt-2">{error}</div>
+                </div>
+              ) : filtered.length === 0 ? (
+                <div className="px-3 py-10 text-center text-sm text-notion-text3">
+                  {items.length === 0 ? "暂无课本，请先上传" : "没有匹配的课本"}
                 </div>
               ) : (
                 <div className="space-y-0.5">
@@ -125,11 +157,11 @@ export default function TextbookSelector({
                         }}
                         className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-left transition-colors ${
                           isSelected
-                            ? "bg-blue-50"
+                            ? "bg-accent-light/50"
                             : "hover:bg-notion-overlay2"
                         }`}
                       >
-                        <div className="w-9 h-9 rounded-md flex items-center justify-center shrink-0 bg-blue-100 text-blue-700">
+                        <div className="w-9 h-9 rounded-md flex items-center justify-center shrink-0 bg-accent-light/60 text-accent">
                           <BookOpen className="w-4 h-4" strokeWidth={1.75} />
                         </div>
                         <div className="flex-1 min-w-0">
@@ -142,7 +174,7 @@ export default function TextbookSelector({
                         </div>
                         {isSelected && (
                           <Check
-                            className="w-4 h-4 text-blue-600 shrink-0"
+                            className="w-4 h-4 text-accent shrink-0"
                             strokeWidth={2.5}
                           />
                         )}
@@ -181,13 +213,13 @@ export default function TextbookSelector({
         className={`flex items-center gap-1.5 h-8 px-2.5 rounded-full transition-colors text-sm ${
           hasSelection
             ? "text-notion-text hover:bg-notion-overlay2"
-            : "text-blue-600 bg-blue-50 hover:bg-blue-100"
+            : "text-accent bg-accent-light/50 hover:bg-accent-light"
         }`}
         title="选择课本"
       >
         <BookOpen className="w-4 h-4" strokeWidth={1.75} />
         <span className="max-w-[160px] truncate font-medium tracking-tight">
-          {hasSelection ? selected!.name : "选择课本"}
+          {hasSelection ? selected?.name || "选择课本" : "选择课本"}
         </span>
         <ChevronDown className="w-3.5 h-3.5 opacity-60" strokeWidth={1.5} />
       </motion.button>

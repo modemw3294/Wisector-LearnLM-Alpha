@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, UserCog, Settings, Bot, Database, Info, ChevronRight } from "lucide-react";
+import { X, UserCog, Settings, Bot, Database, Info, ChevronRight, Terminal } from "lucide-react";
 import ModelsPanel from "./ModelsPanel";
 import { useModelConfigs } from "@/lib/useModelConfigs";
+import { useAccent, ACCENT_COLORS } from "@/lib/accent";
+import { useDevMode } from "@/lib/devMode";
 
 const settingTabs = [
   { id: "preferences", label: "个人偏好设置", icon: UserCog },
@@ -22,6 +24,8 @@ interface SettingsModalProps {
 export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState("preferences");
   const models = useModelConfigs();
+  const { accent, setAccent } = useAccent();
+  const { devMode, setDevMode } = useDevMode();
 
   return (
     <AnimatePresence>
@@ -106,6 +110,28 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                           <span className="text-sm text-notion-text">字体大小</span>
                           <span className="text-sm text-notion-text2">标准</span>
                         </div>
+
+                        {/* 重点色选择 */}
+                        <div className="py-2">
+                          <span className="text-sm text-notion-text block mb-2">重点色</span>
+                          <div className="flex items-center gap-2.5">
+                            {ACCENT_COLORS.map((c) => (
+                              <button
+                                key={c.value}
+                                onClick={() => setAccent(c)}
+                                className={`w-8 h-8 rounded-full transition-all ${
+                                  accent.value === c.value
+                                    ? "ring-2 ring-offset-2 scale-110"
+                                    : "hover:scale-110"
+                                }`}
+                                style={{
+                                  backgroundColor: c.value,
+                                }}
+                                title={c.name}
+                              />
+                            ))}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -125,6 +151,42 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         <div className="flex items-center justify-between py-2">
                           <span className="text-sm text-notion-text">快捷键</span>
                           <span className="text-sm text-notion-text2">默认</span>
+                        </div>
+
+                        {/* 开发者模式 */}
+                        <div className="py-3 border-t border-notion-border">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-8 h-8 rounded-md bg-notion-overlay2 text-notion-text2 flex items-center justify-center shrink-0">
+                                <Terminal className="w-4 h-4" strokeWidth={1.75} />
+                              </div>
+                              <div>
+                                <div className="text-sm font-medium text-notion-text">开发者模式</div>
+                                <div className="text-xs text-notion-text3 mt-0.5">
+                                  显示所有 AI 调用的请求与响应（对话、分析课本、扫描笔记、组卷等）
+                                </div>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => setDevMode(!devMode)}
+                              className={`relative w-11 h-6 rounded-full transition-colors ${
+                                devMode ? "bg-accent" : "bg-notion-overlay2"
+                              }`}
+                              role="switch"
+                              aria-checked={devMode}
+                            >
+                              <span
+                                className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${
+                                  devMode ? "translate-x-5" : "translate-x-0"
+                                }`}
+                              />
+                            </button>
+                          </div>
+                          {devMode && (
+                            <div className="mt-2 text-xs text-accent bg-accent-light/40 rounded-md px-2.5 py-1.5">
+                              已开启：在各功能页面底部可查看折叠的开发者日志面板
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -148,7 +210,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                           href="/data"
                           className="flex items-center gap-3 p-3 rounded-md border border-notion-border2 hover:border-notion-text3 hover:bg-notion-overlay2 transition-colors group"
                         >
-                          <div className="w-9 h-9 rounded-md bg-blue-50 text-blue-700 flex items-center justify-center shrink-0">
+                          <div className="w-9 h-9 rounded-md bg-accent-light/60 text-accent flex items-center justify-center shrink-0">
                             <Database className="w-4 h-4" strokeWidth={1.75} />
                           </div>
                           <div className="flex-1 min-w-0">
